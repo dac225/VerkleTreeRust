@@ -1,4 +1,4 @@
-use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
+//use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
 use ark_ec::PairingEngine;
 use ark_ff::{Field, PrimeField};
 use ark_poly::polynomial::univariate::DensePolynomial;
@@ -15,8 +15,8 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 }
 
 // Node structure
-struct Node {
-    key: Vec<u8>,
+pub struct Node {
+    pub key: Vec<u8>,
     value: Option<Vec<u8>>,
     children: Vec<Node>,
 }
@@ -34,17 +34,16 @@ impl Node {
 }
 
 // VerkleTree structure
-struct VerkleTree {
-    root: Node,
+pub struct VerkleTree {
+    pub root: Node,
 }
-
+ 
 impl VerkleTree {
-    pub fn new() -> Self {
+    pub fn new(initial_key: Option<Vec<u8>>) -> Self {
         VerkleTree {
-            root: Node::new(Vec::new()), // An empty root for the trie
+            root: Node::new(initial_key.unwrap_or_else(Vec::new)),
         }
     }
-
     // TODO: Implement methods for VerkleTree (like commitment)
 }
 
