@@ -29,6 +29,9 @@ impl Node {
             children: Vec::new(),
         }
     }
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        
+    }
 
     // TODO: Implement trie operations for Node (like insertion)
 }
