@@ -1,3 +1,10 @@
+use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
+use ark_ec::PairingEngine;
+use ark_ff::{Field, PrimeField};
+use ark_poly::polynomial::univariate::DensePolynomial;
+use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
+use ark_poly_commit::{Polynomial, PolynomialCommitment};
+
 // hash function (SHA-256 most likely)
 fn hash(){
 

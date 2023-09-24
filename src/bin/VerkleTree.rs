@@ -1,3 +1,6 @@
-struct VerkleTree {
+// struct VerkleTree {
     
+// }
+fn main() {
+    println!("Hello, world!");
 }
