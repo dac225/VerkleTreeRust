@@ -14,22 +14,11 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 }
 
 
-struct INode { //intermediate Node
-    key : String,
-    children : Vec<VNode>
-}
-
-struct LNode { // leaf node
-    key: String, 
-    children: String
-}
-
-// verkle nodes
-enum VNode {
-    // children
-    // hash? (key)
-    key(String),
-    children(Vec<VNode>),
+//One node with optional value
+struct Node {
+    key: Vec<u8>,
+    value: Option<Vec<u8>>,
+    children: Vec<Node>,
 }
 
 
