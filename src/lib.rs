@@ -5,27 +5,31 @@ use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
 use ark_poly_commit::{Polynomial, PolynomialCommitment};
 
+use sha2::{Sha256, Digest};
 // hash function (SHA-256 most likely)
-fn hash(){
-
+pub fn hash(data: &[u8]) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hasher.finalize().to_vec()
 }
 
-struct iNode { //intermediate Node
+
+struct INode { //intermediate Node
     key : String,
-    children : Vec<vNode>
+    children : Vec<VNode>
 }
 
-struct lNode { // leaf node
+struct LNode { // leaf node
     key: String, 
-    value: String
+    children: String
 }
 
 // verkle nodes
-enum vNode {
+enum VNode {
     // children
     // hash? (key)
     key(String),
-    children(Vec<vNode>),
+    children(Vec<VNode>),
 }
 
 
