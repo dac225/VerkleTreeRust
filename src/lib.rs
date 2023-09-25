@@ -29,8 +29,29 @@ impl Node {
             children: Vec::new(),
         }
     }
+    // insert a key-value pair into the trie but in a sorted manner so retrieval will be quicker
+    // downside? insertion will be slower
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        
+
+        // position to insert the new node
+        // use binary sort because it is sorted so it will be faster
+        let pos = self.children.binary_search_by(|node| node.key.cmp(&key));
+
+        match pos {
+            // check if key already exists and if it does then we update the value at that index
+            Ok(index) => {
+                self.children[index].value = Some(value);
+            },
+            // if key does not exist then we insert the new node
+            Err(index) => {
+                let new_node = Node {
+                    key: key,
+                    value: Some(value),
+                    children: Vec::new(),
+                };
+                self.children.insert(index, new_node);
+            }
+        }
     }
 
     // TODO: Implement trie operations for Node (like insertion)
@@ -48,6 +69,11 @@ impl VerkleTree {
         }
     }
     // TODO: Implement methods for VerkleTree (like commitment)
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        // start at the root and insert the first key value
+        self.root.insert(key, value);
+        
+    }
 }
 
 // verkle tree structure 
