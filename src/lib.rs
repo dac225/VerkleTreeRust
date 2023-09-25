@@ -72,7 +72,6 @@ impl VerkleTree {
     }
 }
 
-// verkle tree structure 
 // make it follow trie structure
 // prefix will be the hash
 
