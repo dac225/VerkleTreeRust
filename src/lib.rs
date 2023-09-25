@@ -17,8 +17,8 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 // Node structure
 pub struct Node {
     pub key: Vec<u8>,
-    value: Option<Vec<u8>>,
-    children: Vec<Node>,
+    pub value: Option<Vec<u8>>,
+    pub children: Vec<Node>,
 }
 
 impl Node {
