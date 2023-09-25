@@ -53,8 +53,6 @@ impl Node {
             }
         }
     }
-
-    // TODO: Implement trie operations for Node (like insertion)
 }
 
 // VerkleTree structure
@@ -72,7 +70,7 @@ impl VerkleTree {
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
         // start at the root and insert the first key value
         self.root.insert(key, value);
-        
+
     }
 }
 
