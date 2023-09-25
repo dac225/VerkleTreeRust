@@ -31,24 +31,22 @@ impl Node {
     }
     // insert a key-value pair into the trie but in a sorted manner so retrieval will be quicker
     // downside? insertion will be slower
-    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+    pub fn insert(&mut self, mut key: Vec<u8>, value: Vec<u8>) {
+        if key.is_empty() {
+            self.value = Some(value);
+            return;
+        }
 
-        // position to insert the new node
-        // use binary sort because it is sorted so it will be faster
-        let pos = self.children.binary_search_by(|node| node.key.cmp(&key));
-
-        match pos {
-            // check if key already exists and if it does then we update the value at that index
+        let prefix = key.remove(0); // Take the first byte of the key as prefix
+        let position = self.children.binary_search_by(|child| child.key.cmp(&vec![prefix]));
+        
+        match position {
             Ok(index) => {
-                self.children[index].value = Some(value);
+                self.children[index].insert(key, value);
             },
-            // if key does not exist then we insert the new node
             Err(index) => {
-                let new_node = Node {
-                    key: key,
-                    value: Some(value),
-                    children: Vec::new(),
-                };
+                let mut new_node = Node::new(vec![prefix]);
+                new_node.insert(key, value);
                 self.children.insert(index, new_node);
             }
         }
