@@ -32,7 +32,11 @@ impl Node {
             children: Vec::new(),
         }
     }
-
+    // NEXT STEPS:
+    // make it so when the 257th item gets added then adding another child will force a restructure.
+    // what should happen?
+    // an internal node gets created and redistributes the children across nodes (not a leaf)
+    // similar to how b-trees split nodes when they exceed their maximum capcacity 
     pub fn insert(&mut self, mut key: Vec<u8>, value: Vec<u8>) {
         if key.is_empty() {
             self.value = Some(value);
