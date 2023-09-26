@@ -42,29 +42,41 @@ impl Node {
             self.value = Some(value);
             return;
         }
-
-        let prefix = key.remove(0); // Take the first byte of the key as prefix
-        let hashed_prefix = hash(&vec![prefix]); // Hash the prefix before comparison.
-
+    
+        let prefix = key.remove(0); 
+        let hashed_prefix = hash(&vec![prefix]); 
+    
         let position = self.children.binary_search_by(|child| child.key.cmp(&hashed_prefix));
-
+    
         match position {
             Ok(index) => {
                 self.children[index].insert(key, value);
             },
             Err(index) => {
-                // Before inserting a new node, ensure we haven't exceeded max width.
+                let mut new_node = Node::new(vec![prefix]);
+                new_node.insert(key.clone(), value.clone());
+    
                 if self.children.len() < MAX_CHILDREN {
-                    let mut new_node = Node::new(vec![prefix]);
-                    new_node.insert(key, value);
                     self.children.insert(index, new_node);
-                } else {
-                    // Here you might want to handle the error or panic.
-                    panic!("Exceeded maximum width!");
+                } else if self.children.len() == MAX_CHILDREN {
+                    // Explicitly panic here for debugging purposes
+                    panic!("Node splitting logic reached!");
+    
+                    // Split the node
+                    let mid = MAX_CHILDREN / 2;
+                    let mut new_internal_node = Node::new(self.children[mid].key.clone());
+    
+                    // Move half the children to the new internal node
+                    new_internal_node.children = self.children.split_off(mid + 1); // +1 to keep mid in current node
+                    self.children.push(new_node); 
+    
+                    // This assumes parent nodes exist and can handle the addition of new internal nodes
+                    // In a full implementation, we would recursively handle this and potentially split parent nodes
+                    panic!("A node needs to split! Implementation for attaching new internal nodes is required.");
                 }
             }
         }
-    }
+    }    
 }
 
 pub struct VerkleTree {
@@ -87,10 +99,9 @@ impl VerkleTree {
 // make it follow trie structure
 // prefix will be the hash
 
-// impl VerkleTree{
-//     // functions 
-//     // create root
-//     // insert as children
-//     // commitment
-//     // compute commitment
-// }
+// functions 
+// create root
+// insert as children
+// commitment
+// compute commitment
+// verify commitment

@@ -5,18 +5,11 @@ fn main() {
 
     // Insert 257 unique prefixes to test max width
     for i in 0..=256 {
-        let key = vec![i as u8]; 
+        let key = vec![i as u8];
         let value = b"value".to_vec();
-    
-        if i < 256 {
-            tree.insert(key, value);
-        } else {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                tree.insert(key, value);
-            })).expect_err("Tree width exceeded 256, but did not panic!");
-        }
+        tree.insert(key, value);
     }
-    
+
     let data = b"Hello, world!";
     let hashed_data = hash(data);
     println!("Hashed data: {:?}", hashed_data);
@@ -26,7 +19,7 @@ fn main() {
     println!("Created a new VerkleTree with a blank root key: {:?}", truncate_hash(&tree_with_blank_root.root.key));
 
     // Test inserting a key-value pair
-    tree_with_blank_root.insert(b"key1".to_vec(), b"value1".to_vec());
+    tree_with_blank_root.insert(b"Hello".to_vec(), b"World".to_vec());
     println!("After inserting key1-value1 into tree_with_blank_root:");
     print_tree(&tree_with_blank_root.root, 0);
 
