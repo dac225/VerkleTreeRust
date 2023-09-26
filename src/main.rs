@@ -1,6 +1,22 @@
 use VerkleTreeRust::{hash, Node, VerkleTree};
 
 fn main() {
+    let mut tree = VerkleTree::new(None);
+
+    // Insert 257 unique prefixes to test max width
+    for i in 0..=256 {
+        let key = vec![i as u8]; 
+        let value = b"value".to_vec();
+    
+        if i < 256 {
+            tree.insert(key, value);
+        } else {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tree.insert(key, value);
+            })).expect_err("Tree width exceeded 256, but did not panic!");
+        }
+    }
+    
     let data = b"Hello, world!";
     let hashed_data = hash(data);
     println!("Hashed data: {:?}", hashed_data);

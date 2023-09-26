@@ -14,6 +14,9 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+// lets set a fixed width of 256 bits (similar to vitalik's implementation)
+const MAX_CHILDREN: usize = 256;
+
 // Node structure
 pub struct Node {
     pub key: Vec<u8>, // This key will now store the hashed prefix.
@@ -40,15 +43,21 @@ impl Node {
         let hashed_prefix = hash(&vec![prefix]); // Hash the prefix before comparison.
 
         let position = self.children.binary_search_by(|child| child.key.cmp(&hashed_prefix));
-        
+
         match position {
             Ok(index) => {
                 self.children[index].insert(key, value);
             },
             Err(index) => {
-                let mut new_node = Node::new(vec![prefix]); // The hashing occurs inside `new`.
-                new_node.insert(key, value);
-                self.children.insert(index, new_node);
+                // Before inserting a new node, ensure we haven't exceeded max width.
+                if self.children.len() < MAX_CHILDREN {
+                    let mut new_node = Node::new(vec![prefix]);
+                    new_node.insert(key, value);
+                    self.children.insert(index, new_node);
+                } else {
+                    // Here you might want to handle the error or panic.
+                    panic!("Exceeded maximum width!");
+                }
             }
         }
     }
