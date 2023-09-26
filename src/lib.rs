@@ -16,7 +16,7 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 
 // Node structure
 pub struct Node {
-    pub key: Vec<u8>,
+    pub key: Vec<u8>, // This key will now store the hashed prefix.
     pub value: Option<Vec<u8>>,
     pub children: Vec<Node>,
 }
@@ -24,13 +24,12 @@ pub struct Node {
 impl Node {
     pub fn new(key: Vec<u8>) -> Self {
         Node {
-            key,
+            key: hash(&key), // The passed key is hashed during node creation.
             value: None,
             children: Vec::new(),
         }
     }
-    // insert a key-value pair into the trie but in a sorted manner so retrieval will be quicker
-    // downside? insertion will be slower
+
     pub fn insert(&mut self, mut key: Vec<u8>, value: Vec<u8>) {
         if key.is_empty() {
             self.value = Some(value);
@@ -38,14 +37,16 @@ impl Node {
         }
 
         let prefix = key.remove(0); // Take the first byte of the key as prefix
-        let position = self.children.binary_search_by(|child| child.key.cmp(&vec![prefix]));
+        let hashed_prefix = hash(&vec![prefix]); // Hash the prefix before comparison.
+
+        let position = self.children.binary_search_by(|child| child.key.cmp(&hashed_prefix));
         
         match position {
             Ok(index) => {
                 self.children[index].insert(key, value);
             },
             Err(index) => {
-                let mut new_node = Node::new(vec![prefix]);
+                let mut new_node = Node::new(vec![prefix]); // The hashing occurs inside `new`.
                 new_node.insert(key, value);
                 self.children.insert(index, new_node);
             }
@@ -53,24 +54,22 @@ impl Node {
     }
 }
 
-// VerkleTree structure
 pub struct VerkleTree {
     pub root: Node,
 }
- 
+
 impl VerkleTree {
     pub fn new(initial_key: Option<Vec<u8>>) -> Self {
         VerkleTree {
             root: Node::new(initial_key.unwrap_or_else(Vec::new)),
         }
     }
-    // TODO: Implement methods for VerkleTree (like commitment)
-    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        // start at the root and insert the first key value
-        self.root.insert(key, value);
 
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        self.root.insert(key, value);
     }
 }
+
 
 // make it follow trie structure
 // prefix will be the hash
