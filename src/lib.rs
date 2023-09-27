@@ -1,3 +1,6 @@
+use ark_poly::UVPolynomial;
+use ark_ff::fields::PrimeField;
+use ark_ff::ToBytes;
 use ark_ec::PairingEngine; 
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin_pc::MarlinKZG10; 
@@ -5,6 +8,7 @@ use ark_poly_commit::PolynomialCommitment;
 use ark_std::rand::Rng;
 use ark_bls12_381::Bls12_381;
 use sha2::{Sha256, Digest};
+use ark_poly_commit::LabeledPolynomial;
 
 
 // Set up for Polynomial Commitments using ark library
@@ -13,9 +17,12 @@ type Poly = DensePolynomial<Fr>;
 
 type KZG10 = MarlinKZG10<Bls12_381, Poly>;
 
-pub fn setup<R: Rng>(degree: usize, rng: &mut R) -> <KZG10 as PolynomialCommitment<Fr, Poly>>::UniversalParams {
-    KZG10::setup(degree, None, rng).unwrap()
+pub fn setup<R: Rng>(degree: usize, rng: &mut R) -> (<KZG10 as PolynomialCommitment<Fr, Poly>>::UniversalParams, <KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey) {
+    let params = KZG10::setup(degree, None, rng).unwrap();
+    let (committer_key, _) = KZG10::trim(&params, degree, 0, None).unwrap();
+    (params, committer_key)
 }
+
 
 // hash function (SHA-256 most likely)
 pub fn hash(data: &[u8]) -> Vec<u8> {
@@ -86,21 +93,65 @@ impl Node {
             }
         }
     }   
+
+    pub fn compute_commitment(&self, committer_key: &<KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey) -> <KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment {
+        if self.children.is_empty() {
+            let value_as_bytes = self.value.as_ref().map_or_else(Vec::new, |v| v.clone());
+            let value_hash = hash(&value_as_bytes);
+    
+            let fr_value = Fr::from_le_bytes_mod_order(&value_hash);
+            
+            let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
+            
+            let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
+            return commitments[0].commitment().clone();
+        }
+    
+        let child_commitments: Vec<_> = self.children.iter().map(|child| child.compute_commitment(committer_key)).collect();
+        let concatenated_bytes: Vec<u8> = child_commitments.iter().flat_map(|commitment| {
+            let mut bytes = Vec::new();
+            commitment.write(&mut bytes).unwrap();
+            bytes
+        }).collect();
+        let combined_hash = hash(&concatenated_bytes);
+        
+        let fr_value = Fr::from_le_bytes_mod_order(&combined_hash);
+        let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
+        let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
+        commitments[0].commitment().clone()
+    }
+    
+    
     
 }
 
+// VerkleTree structure updated to store the universal parameters
 pub struct VerkleTree {
     pub root: Node,
+    pub params: (<KZG10 as PolynomialCommitment<Fr, Poly>>::UniversalParams, <KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey),
 }
+
 
 impl VerkleTree {
     pub fn new(initial_key: Option<Vec<u8>>) -> Self {
+        let params = setup(MAX_CHILDREN, &mut rand::thread_rng());
         VerkleTree {
             root: Node::new(initial_key.unwrap_or_else(Vec::new)),
+            params,
         }
     }
 
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
         self.root.insert(key, value);
     }
+
+    pub fn commitment(&self) -> <KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment {
+        self.root.compute_commitment(&self.params.1) 
+    }
+    
 }
+
+
+
+
+
