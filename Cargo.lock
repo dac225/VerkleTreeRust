@@ -6,11 +6,12 @@ version = 3
 name = "VerkleTreeRust"
 version = "0.1.0"
 dependencies = [
- "ark-bn254 0.3.0",
+ "ark-bls12-381",
  "ark-ec 0.3.0",
  "ark-ff 0.3.0",
  "ark-poly 0.3.0",
  "ark-poly-commit",
+ "ark-std 0.3.0",
  "digest 0.10.7",
  "rand",
  "sha2",
@@ -40,10 +41,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ark-bn254"
+name = "ark-bls12-381"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea691771ebbb28aea556c044e2e5c5227398d840cee0c34d4d20fa8eb2689e8c"
+checksum = "65be532f9dd1e98ad0150b037276cde464c6f371059e6dd02c0222395761f6aa"
 dependencies = [
  "ark-ec 0.3.0",
  "ark-ff 0.3.0",
@@ -865,7 +866,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c4bf08ecf4c9855e5144fc99898523a30f6b7b94812cb8ebc3fe4700c3ec06c"
 dependencies = [
- "ark-bn254 0.4.0",
+ "ark-bn254",
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
  "ark-poly 0.4.2",
