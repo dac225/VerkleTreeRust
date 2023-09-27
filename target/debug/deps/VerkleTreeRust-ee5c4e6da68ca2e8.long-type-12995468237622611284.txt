@@ -1,0 +1,1 @@
+(Vec<LabeledCommitment<ark_poly_commit::marlin_pc::Commitment<Bls12<ark_bls12_381::Parameters>>>>, Vec<ark_poly_commit::marlin_pc::Randomness<Fp256<FrParameters>, DensePolynomial<Fp256<FrParameters>>>>)

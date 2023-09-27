@@ -1,4 +1,4 @@
-use ark_ec::PairingEngine; // Re-add this import
+use ark_ec::PairingEngine; 
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin_pc::MarlinKZG10; 
 use ark_poly_commit::PolynomialCommitment;
@@ -6,6 +6,8 @@ use ark_std::rand::Rng;
 use ark_bls12_381::Bls12_381;
 use sha2::{Sha256, Digest};
 
+
+// Set up for Polynomial Commitments using ark library
 type Fr = <Bls12_381 as PairingEngine>::Fr;
 type Poly = DensePolynomial<Fr>;
 
@@ -32,6 +34,8 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
+// NEXT STEPS: 
+// - create function for commitments using ark library
 impl Node {
     pub fn new(key: Vec<u8>) -> Self {
         Node {
@@ -40,11 +44,6 @@ impl Node {
             children: Vec::new(),
         }
     }
-    // NEXT STEPS:
-    // make it so when the 257th item gets added then adding another child will force a restructure.
-    // what should happen?
-    // an internal node gets created and redistributes the children across nodes (not a leaf)
-    // similar to how b-trees split nodes when they exceed their maximum capcacity 
     pub fn split_and_insert(&mut self, new_node: Node) {
         // Find the midpoint of the children and create a new internal node
         let mid = MAX_CHILDREN / 2;
@@ -87,6 +86,7 @@ impl Node {
             }
         }
     }   
+    
 }
 
 pub struct VerkleTree {
@@ -104,14 +104,3 @@ impl VerkleTree {
         self.root.insert(key, value);
     }
 }
-
-
-// make it follow trie structure
-// prefix will be the hash
-
-// functions 
-// create root
-// insert as children
-// commitment
-// compute commitment
-// verify commitment
