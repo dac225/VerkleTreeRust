@@ -67,60 +67,83 @@ impl Node {
         self.children.push(new_internal_node);
     }
 
+    // Inserts a key-value pair into the tree.
     pub fn insert(&mut self, mut key: Vec<u8>, value: Vec<u8>) {
+        // If the key is empty, set the node's value and return.
         if key.is_empty() {
             self.value = Some(value);
             return;
         }
 
+        // Remove and hash the first byte of the key to find a position for insertion.
         let prefix = key.remove(0);
         let hashed_prefix = hash(&vec![prefix]);
 
+        // Search for the child by the hashed prefix.
         let position = self.children.binary_search_by(|child| child.key.cmp(&hashed_prefix));
         match position {
+            // If the child is found, recursively insert into that child.
             Ok(index) => {
                 self.children[index].insert(key, value);
             },
+            // If the child is not found, create a new node and attempt to insert.
             Err(index) => {
                 let mut new_node = Node::new(vec![prefix]);
                 new_node.insert(key.clone(), value.clone());
 
+                // If we're under the maximum number of children, simply insert the new node.
                 if self.children.len() < MAX_CHILDREN {
                     self.children.insert(index, new_node);
-                } else if self.children.len() == MAX_CHILDREN {
+                } 
+                // If we're at the maximum, split and insert.
+                else if self.children.len() == MAX_CHILDREN {
                     self.split_and_insert(new_node);
                 }
             }
         }
-    }   
+    }
 
+    /// Computes the commitment of the current node using KZG10 polynomial commitment scheme.
     pub fn compute_commitment(&self, committer_key: &<KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey) -> <KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment {
+        // If the node has no children, compute the commitment of its value.
         if self.children.is_empty() {
             let value_as_bytes = self.value.as_ref().map_or_else(Vec::new, |v| v.clone());
             let value_hash = hash(&value_as_bytes);
     
+            // Convert the hash to field element.
             let fr_value = Fr::from_le_bytes_mod_order(&value_hash);
             
+            // Create a polynomial from the field element.
             let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
             
+            // Use the polynomial commitment scheme to get the commitment of the polynomial.
             let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
             return commitments[0].commitment().clone();
         }
     
+        // If the node has children, compute commitments of all children.
         let child_commitments: Vec<_> = self.children.iter().map(|child| child.compute_commitment(committer_key)).collect();
+        
+        // Concatenate the bytes of all child commitments.
         let concatenated_bytes: Vec<u8> = child_commitments.iter().flat_map(|commitment| {
             let mut bytes = Vec::new();
             commitment.write(&mut bytes).unwrap();
             bytes
         }).collect();
+
+        // Hash the concatenated commitments.
         let combined_hash = hash(&concatenated_bytes);
         
+        // Convert the hash to a field element.
         let fr_value = Fr::from_le_bytes_mod_order(&combined_hash);
+        
+        // Create a polynomial from the field element.
         let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
+        
+        // Use the polynomial commitment scheme to get the commitment of the polynomial.
         let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
         commitments[0].commitment().clone()
     }
-    
     
     
 }
