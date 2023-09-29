@@ -3,8 +3,8 @@ use ark_ff::fields::PrimeField;
 use ark_ff::ToBytes;
 use ark_ec::PairingEngine; 
 use ark_poly::polynomial::univariate::DensePolynomial;
-use ark_poly_commit::marlin_pc::MarlinKZG10; 
-use ark_poly_commit::PolynomialCommitment;
+use ark_poly_commit::{marlin_pc::MarlinKZG10, ipa_pc::CommitterKey}; 
+use ark_poly_commit::{PolynomialCommitment, PolynomialLabel};
 use ark_std::rand::Rng;
 use ark_bls12_381::Bls12_381;
 use sha2::{Sha256, Digest};
@@ -23,7 +23,6 @@ pub fn setup<R: Rng>(degree: usize, rng: &mut R) -> (<KZG10 as PolynomialCommitm
     (params, committer_key)
 }
 
-
 // hash function (SHA-256 most likely)
 pub fn hash(data: &[u8]) -> Vec<u8> {
     let mut hasher = Sha256::new();
@@ -37,8 +36,8 @@ const MAX_CHILDREN: usize = 256;
 // Node structure
 pub struct Node {
     pub key: Vec<u8>, // This key will now store the hashed prefix.
-    pub value: Option<Vec<u8>>,
-    pub children: Vec<Node>,
+    pub value: Option<Vec<u8>>, // the commitment of the children nodes
+    pub children: Vec<Node>, 
 }
 
 // NEXT STEPS: 
@@ -68,6 +67,8 @@ impl Node {
     }
 
     // Inserts a key-value pair into the tree.
+    // TODO: Compute commitment in insert to be inserted into the intermediate nodes
+    // Modify insert so that it inserts the commitment, address and balance
     pub fn insert(&mut self, mut key: Vec<u8>, value: Vec<u8>) {
         // If the key is empty, set the node's value and return.
         if key.is_empty() {
@@ -76,6 +77,7 @@ impl Node {
         }
 
         // Remove and hash the first byte of the key to find a position for insertion.
+        // w/ each level, we shed 8 bits which gives us a branching factor of 256 and a maximum depth of 32
         let prefix = key.remove(0);
         let hashed_prefix = hash(&vec![prefix]);
 
@@ -109,12 +111,15 @@ impl Node {
         if self.children.is_empty() {
             let value_as_bytes = self.value.as_ref().map_or_else(Vec::new, |v| v.clone());
             let value_hash = hash(&value_as_bytes);
+
+            // converting value_hash to little endian so that it can be read properly by from_le_bytes_mod_order()
+            let value_hash = value_hash.reverse();
     
             // Convert the hash to field element.
-            let fr_value = Fr::from_le_bytes_mod_order(&value_hash);
+            let fr_value = Fr::from_le_bytes_mod_order(&value_hash);;
             
             // Create a polynomial from the field element.
-            let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
+            let polynomial = Poly::from_coefficients_vec(fr_value);
             
             // Use the polynomial commitment scheme to get the commitment of the polynomial.
             let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
@@ -132,7 +137,10 @@ impl Node {
         }).collect();
 
         // Hash the concatenated commitments.
-        let combined_hash = hash(&concatenated_bytes);
+        let temp_combined_hash = hash(&concatenated_bytes);
+
+        // reverse the order of combined_hash so that Fr::from_le_bytes_mod_order() will read correctly (needs to be little endian)
+        let combined_hash = temp_combined_hash.reverse();
         
         // Convert the hash to a field element.
         let fr_value = Fr::from_le_bytes_mod_order(&combined_hash);
@@ -143,6 +151,30 @@ impl Node {
         // Use the polynomial commitment scheme to get the commitment of the polynomial.
         let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
         commitments[0].commitment().clone()
+    }
+
+    // Params?
+    // key value that we'll check?
+    // call proof from PolyCommit function
+    // we can make the key, value readable by hashing it and turning it to a field
+    pub fn verify_commitment(
+                            &self, 
+                            labeled_polynomials: <IntoIterator<Item = &'a LabeledPolynomial<F, P>>, 
+                            commitments: <IntoIterator<Item = &'a LabeledCommitment<Self::Commitment>>::LabeledCommitment<Commitment>,
+                            point: &'a P::Point,
+                            challenge_generator: &mut ChallengeGenerator<F, S>,
+                            rands: IntoIterator<Item = &'a Self::Randomness>,
+                            rng: Option<&mut dyn RngCore>
+                            )  -> Result<Self::Proof, Self::Error> {
+            // hash the key / value and turn it into a field
+            // evaluate the polynomial at the point that is corresponding to the hash of the value
+    
+                        
+                        
+    }
+
+    pub fn proof_generation(){
+
     }
     
     

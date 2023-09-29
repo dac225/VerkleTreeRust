@@ -58,9 +58,23 @@ Requirements of a Verkle trie structure:
         - inner nodes are...
             - d-ary vector commits to their children where the i-th child
             contains all nodes with the prefix i as the d-digit binary number
-            * The root of a leaf node is simply a hash of the (key, value) pair of 32 byte
+ -->        * The root of a leaf node is simply a hash of the (key, value) pair of 32 byte
             strings whereas the root of an inner node is the hash of the vector commitment 
             (in KZG, this is a G_1(group element in a finite field) element) *
+                - to [insert] a leaf node, we must hash the key and value
+                - all intermediate, ancestor nodes must contain the hash of the vector commitment at it's level
+                    - which means that me must compute the vector commitment at each level 
+                - w/ each level, we shed 8 bits which gives us a branching factor of 256 and a maximum depth of 32
+                    - but to maximize on efficiency, we could make a direct connection between a node and a child if no intermediate nodes stand between them (i.e. a parent node can point to any child/grandchild node if the DAG has only 1 branch at each level from any given level)
+        - insertion would then constitute 
+            1) moving down the tree 
+            2) inserting the node at its position
+                - assigning the value being added to the value of the leaf node
+                - leaf node has no children
+            3) and then computing the commitments to the data to be inserted up the tree and 
+            4) hashing the commitments of each intermediate ancestral node of the inserted node
+            5) assigning the value of each 
+
     - Proofs:
         - <https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html>
         - In order to prove the leaf value [L]'s hash [K] points to a specific value [V], we must give [c] commitments as well as c additional KZG proofs for c nodes in the path from root to L of the form p_i = C_i(k_n) ... p_i-1 = C_i(k_n-1) where we have
