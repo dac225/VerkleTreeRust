@@ -1,0 +1,11 @@
+/Users/david/Desktop/VerkleTreeRust/target/debug/deps/ark_std-ffd36f60b5d76a9d.rmeta: /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/lib.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/rand_helper.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/perf_trace.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/mod.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/rev.rs
+
+/Users/david/Desktop/VerkleTreeRust/target/debug/deps/libark_std-ffd36f60b5d76a9d.rlib: /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/lib.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/rand_helper.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/perf_trace.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/mod.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/rev.rs
+
+/Users/david/Desktop/VerkleTreeRust/target/debug/deps/ark_std-ffd36f60b5d76a9d.d: /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/lib.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/rand_helper.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/perf_trace.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/mod.rs /Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/rev.rs
+
+/Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/lib.rs:
+/Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/rand_helper.rs:
+/Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/perf_trace.rs:
+/Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/mod.rs:
+/Users/david/.cargo/registry/src/index.crates.io-6f17d22bba15001f/ark-std-0.4.0/src/iterable/rev.rs:

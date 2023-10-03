@@ -17,3 +17,9 @@ ark-ec = "0.3"
 ark-ff = "0.3"
 rand = "0.8"
 ark-serialize = "0.3.0"
+ark-bn254 = "0.3.0" 
+
+
+[[bin]]
+name = "verkletree"  # Change the binary name to "verkletree"
+path = "src/verkletree.rs"  # Point to the new main.rs
