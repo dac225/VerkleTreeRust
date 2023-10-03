@@ -14,7 +14,8 @@ use ark_ec::bls12::Bls12;
 use ark_bls12_381::Parameters;
 use ark_poly_commit::LabeledCommitment;
 use ark_std::One;
-use ark_serialize::Write;
+use ark_poly_commit::kzg10::Commitment; 
+
 
 
 // Set up for Polynomial Commitments using ark library
@@ -126,7 +127,11 @@ impl Node {
             bytes
         }).collect();
 
+        println!("Concatenated bytes for internal node: {:?}", concatenated_bytes); // Debugging Step 1
+
         let combined_hash = hash(&concatenated_bytes);
+        println!("Combined hash for internal node: {:?}", combined_hash); // Debugging Step 1
+
         let fr_value = Fr::from_le_bytes_mod_order(&combined_hash);
         let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
         let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
@@ -135,12 +140,30 @@ impl Node {
         self.commitment.as_ref().unwrap().clone()
     }
 
+    // Helper function to combine commitments in a consistent manner
+    fn combine_commitments(
+        current: &<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment,
+        sibling: &<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment,
+        is_left: bool
+    ) -> Vec<u8> {
+        let mut concatenated_bytes = Vec::new();
+        if is_left {
+            sibling.write(&mut concatenated_bytes).unwrap();
+            current.write(&mut concatenated_bytes).unwrap();
+        } else {
+            current.write(&mut concatenated_bytes).unwrap();
+            sibling.write(&mut concatenated_bytes).unwrap();
+        }
+        concatenated_bytes
+    }
+    
+
     pub fn verify_commitment(
         &self,
         commitment: &<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment,
         key: Vec<u8>,
         value: Vec<u8>,
-        siblings: &Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>, // Use the fully-qualified path
+        siblings: &Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>,
         committer_key: &<KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey,
     ) -> bool {
         // Compute the commitment of the key-value pair
@@ -149,45 +172,41 @@ impl Node {
         let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
         let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
         let mut current_commitment = commitments[0].commitment().clone();
-    
+
         // Reconstruct the path to the root using the siblings
         for (sibling, is_left) in siblings.iter().rev() {
-            let mut concatenated_bytes = Vec::new();
-            if *is_left {
-                sibling.write(&mut concatenated_bytes).unwrap();
-                current_commitment.write(&mut concatenated_bytes).unwrap();
-            } else {
-                current_commitment.write(&mut concatenated_bytes).unwrap();
-                sibling.write(&mut concatenated_bytes).unwrap();
-            }
+            let concatenated_bytes = Self::combine_commitments(&current_commitment, sibling, *is_left);
+            println!("Concatenated bytes during verification: {:?}", concatenated_bytes); // Debugging Step 3
+
+
             println!("Current commitment: {:?}", current_commitment);
             println!("Combining with sibling: {:?}", sibling);
             let combined_hash = hash(&concatenated_bytes);
+            println!("Combined hash during verification: {:?}", combined_hash); // Debugging Step 3
             let fr_combined = Fr::from_le_bytes_mod_order(&combined_hash);
             let polynomial_combined = Poly::from_coefficients_vec(vec![fr_combined]);
             let (combined_commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial_combined, None, None)], None).unwrap();
             current_commitment = combined_commitments[0].commitment().clone();
         }
-    
+
         // Check if the reconstructed root matches the provided commitment
         println!("Reconstructed Commitment: {:?}", current_commitment);
         println!("Provided Commitment: {:?}", commitment);
         current_commitment == *commitment
     }
-    
-    
+
     pub fn proof_generation(&mut self, key: Vec<u8>, committer_key: &<KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey) -> Option<Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>> {
         let mut current_node: &mut Node = self;
         let mut path: Vec<(<MarlinKZG10<Bls12<ark_bls12_381::Parameters>, DensePolynomial<<Bls12<ark_bls12_381::Parameters> as PairingEngine>::Fr>> as PolynomialCommitment<<Bls12<ark_bls12_381::Parameters> as PairingEngine>::Fr, DensePolynomial<<Bls12<ark_bls12_381::Parameters> as PairingEngine>::Fr>>>::Commitment, bool)> = vec![];
-        
-        // Traverse the tree to find the leaf node for the given key
+
         // Traverse the tree to find the leaf node for the given key
         let mut partial_key = key.clone();
         while !partial_key.is_empty() {
             let prefix = partial_key.remove(0);
             let hashed_prefix = hash(&vec![prefix]);
+            println!("Hashed prefix during proof generation: {:?}", hashed_prefix); // Debugging Step 2
             let position = current_node.children.binary_search_by(|child| child.key.cmp(&hashed_prefix));
-            
+
             match position {
                 Ok(index) => {
                     // If the node exists, record the siblings and move deeper
@@ -198,7 +217,7 @@ impl Node {
                             println!("Adding sibling commitment at index {}: {:?}", i, sibling_commitment);
                         }
                     }
-                    
+
                     current_node = &mut current_node.children[index];
                 },
                 Err(_) => return None, // Return None if the key doesn't exist
@@ -208,6 +227,7 @@ impl Node {
         println!("Proof for key {:?}: {:?}", key, path);
         Some(path)
     }
+
     
     
 }
