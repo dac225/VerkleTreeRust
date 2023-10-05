@@ -1,4 +1,14 @@
-// grabbed from 01 labs
+// For this exercise, you will implement a verkle tree, as described
+// here: https://vitalik.ca/general/2021/06/18/verkle.html
+//
+// There is a test which should pass, which you can run with
+//
+//     cargo test
+//
+// There are TODOs throughout the code, which you should fill in appropriately.
+//
+// The task is to define the types VerkleTree and VerkleProof so that you can define the 
+// functions below.
 
 use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
 use ark_ec::PairingEngine;

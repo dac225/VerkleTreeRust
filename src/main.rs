@@ -7,87 +7,40 @@ use rand::Rng;
 use VerkleTreeRust::VerkleTree;
 
 fn main() {
-    // Define the type parameters F, P, and PC based on your requirements
     type F = <Bls12_381 as ark_ec::PairingEngine>::Fr;
     type P = DensePolynomial<F>;
     type PC = MarlinKZG10<Bls12_381, P>;
 
-    // Set up a random number generator
     let mut rng = rand::thread_rng();
-
-    // Specify the desired degree for your polynomial commitment
     let degree = 256;
-
-    // Generate the parameters for the polynomial commitment
     let params = PC::setup(degree, None, &mut rng).unwrap();
-
-    // Generate the committer key by trimming the parameters
-    let committer_key = PC::trim(&params, degree, 0, None).unwrap().0; // Use only the CommitterKey part
+    let committer_key = PC::trim(&params, degree, 0, None).unwrap().0; 
 
     // Create the VerkleTree with the committer key, depth, and branching factor
     let depth = 16; // Adjust as needed
     let branching_factor = 256; // Adjust as needed
 
     // Create the VerkleTree
-    let mut tree: VerkleTree<F, P, PC> = VerkleTree::new(committer_key.clone(), depth, branching_factor);
+    let mut tree: VerkleTree<F, P, PC> = VerkleTree::new(committer_key.clone(), depth, branching_factor)
+    .expect("Failed to create VerkleTree");
+    println!("Created VerkleTree with depth {}, branching factor {}", depth, branching_factor);
+
+    let wallet_address = "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9";
+    let key_wallet = hex::decode(wallet_address).expect("Failed to decode hex string");
+    
+    // Insert the wallet address and its associated value into the tree
+    tree.insert(key_wallet.clone(), vec![13, 14, 15]);
+    println!("Inserted wallet address \"{}\" with value {:?}", wallet_address, vec![13, 14, 15]);
+    
+    // Retrieve the value associated with the wallet address
+    let retrieved_value = tree.get(key_wallet);
+    match retrieved_value {
+        Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
+        None => println!("No value found for wallet address {}", wallet_address),
+    }
 
 }
 
 
 
-
-
-// fn main() {
-//     let mut rng = rand::thread_rng();
-
-//     // Step 1: Initialization
-//     println!("Initializing a Verkle tree");
-//     let max_children = 256; 
-//     let max_depth = 16;
-//     let mut tree = VerkleTree::new(None, max_children, 16);
-//     let key1 = b"key1".to_vec();
-//     let value1 = b"value1".to_vec();
-//     let key2 = b"key2".to_vec();
-//     let value2 = b"value2".to_vec();
-
-//     // Step 2: Insertion
-//     println!("Inserting key1 and key2");
-//     tree.insert(key1.clone(), value1.clone());
-//     tree.insert(key2.clone(), value2.clone());
-
-//     // // Step 3: Commit
-//     // println!("Computing commitment");
-//     // let commit1 = tree.compute_commitment();
-//     // println!("Commitment after inserting key1 and key2: {:?}", commit1);
-
-//     // // Step 4: Generate proofs
-//     // println!("Generating proofs for key1 and key2");
-//     // let proof_for_key1 = tree.root.proof_generation(key1.clone(), &tree.params.1).expect("Proof generation for key1 failed");
-//     // let proof_for_key2 = tree.root.proof_generation(key2.clone(), &tree.params.1).expect("Proof generation for key2 failed");
-    
-//     // let actual_proof_for_key1 = &proof_for_key1;
-//     // let actual_proof_for_key2 = &proof_for_key2;
-//     // println!("Proof for key1: {:?}", proof_for_key1);
-//     // println!("Proof for key2: {:?}", proof_for_key2);
-    
-
-//     // // Step 5: Verify proofs
-//     // println!("Verifying proofs for key1 and key2");
-//     // let is_verified_key1 = tree.verify(&commit1, key1.clone(), value1.clone(), actual_proof_for_key1);
-//     // assert!(is_verified_key1, "Verification for key1 failed with commitment: {:?}", commit1);
-
-//     // let is_verified_key2 = tree.verify(&commit1, key2.clone(), value2.clone(), actual_proof_for_key2);
-//     // assert!(is_verified_key2, "Verification for key2 failed with commitment: {:?}", commit1);
-
-//     // // For additional testing: modify the tree and compute a new commitment
-//     // let key3 = b"key3".to_vec();
-//     // let value3 = b"value3".to_vec();
-//     // tree.insert(key3.clone(), value3.clone());
-//     // let commit2 = tree.compute_commitment();
-//     // println!("Commitment after inserting key3: {:?}", commit2);
-
-//     // assert_ne!(commit1, commit2, "The commitments should not be the same after modifying the tree");
-
-//     println!("All tests passed!");
-// }
 
