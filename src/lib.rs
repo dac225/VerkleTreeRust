@@ -40,6 +40,7 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
 }
 
 // LeafNode Structure
+#[derive(Clone)]
 pub struct LeafNode {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
@@ -85,41 +86,39 @@ where
         }
     }
 
-    pub fn get(&self, mut key: Vec<u8>) -> Option<&Vec<u8>> {
-        if key.is_empty() {
-            // Check if there are leaf nodes under this node
-            for child in &self.children {
-                if let Entry::Leaf(leaf) = child {
-                    return Some(&leaf.value);
-                }
-            }
-            return None;
-        }
+    pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
+        let mut current_node = self;
     
-        let prefix = key.remove(0);
+        for depth in 0..key.len() {
+            let prefix = key[depth];
+            let position = current_node.children.iter().position(|child| match child {
+                Entry::InternalNode(node) => node.key[0] == prefix,
+                Entry::Leaf(leaf) => leaf.key[depth] == prefix,
+            });
     
-        let position = self.children.binary_search_by(|child| match child {
-            Entry::InternalNode(node) => node.key[0].cmp(&prefix),
-            Entry::Leaf(leaf) => leaf.key[0].cmp(&prefix),
-        });
-    
-        match position {
-            Ok(index) => {
-                match &self.children[index] {
-                    Entry::InternalNode(node) => return node.get(key),
-                    Entry::Leaf(leaf) => {
-                        if leaf.key == key {
-                            return Some(&leaf.value);
+            match position {
+                Some(index) => {
+                    match &current_node.children[index] {
+                        Entry::InternalNode(node) => {
+                            current_node = node;
+                        },
+                        Entry::Leaf(leaf) => {
+                            if leaf.key == key {
+                                return Some(leaf.value.clone());
+                            } else {
+                                return None;
+                            }
                         }
-                        return None;
                     }
+                },
+                None => {
+                    return None;
                 }
             }
-            Err(_) => {
-                return None;
-            }
         }
-    }
+    
+        None
+    }    
     
     pub fn split_and_insert(&mut self, new_node: Node<F, P, PC>) {
         let mid = self.max_children / 2;
@@ -132,72 +131,67 @@ where
         println!("Split and Inserted Internal Node at Depth {}: Key: {:?}", self.depth, self.key);
     }
     
-    pub fn insert(&mut self, mut key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
-        if self.depth >= max_depth || key.is_empty() {
-            // Reached max depth or end of key. Store the value here.
-            let leaf = LeafNode {
-                key: key.clone(),
-                value: value.clone(),
-            };
-            self.children.push(Entry::Leaf(leaf));
-            println!(
-                "Inserted Leaf at Depth {}: Key: {:?}, Value: {:?}",
-                self.depth, key, value
-            );
-            return;
-        }
-
-        let prefix = key[0];
-
-        let position = self.children.binary_search_by(|child| match child {
-            Entry::InternalNode(node) => node.key[0].cmp(&prefix),
-            Entry::Leaf(leaf) => leaf.key[0].cmp(&prefix),
-        });
-
-        match position {
-            Ok(index) => {
-                match &mut self.children[index] {
-                    Entry::InternalNode(node) => {
-                        let mut key_clone = key.clone();
-                        let mut value_clone = value.clone();
-                        node.insert(key_clone, value_clone, max_depth - 1); // Decrement max_depth
-                        println!(
-                            "Inserted Internal Node at Depth {}: Key: {:?}, Prefix: {:?}",
-                            self.depth, key, prefix
-                        );
-                    },
-                    Entry::Leaf(leaf) => {
-                        let mut new_node =
-                            Node::new(vec![prefix], self.max_children, self.depth + 1); // Increment depth
-                        let mut key_clone = key.clone();
-                        let mut value_clone = value.clone();
-                        new_node.insert(key_clone, value_clone, max_depth - 1); // Decrement max_depth
-                        self.children[index] = Entry::InternalNode(new_node);
-                        println!(
-                            "Inserted Leaf into Internal Node at Depth {}: Key: {:?}, Value: {:?}",
-                            self.depth, key, value
-                        );
-                    }
-                }
-            }
-            Err(index) => {
-                let mut new_node = Node::new(vec![prefix], self.max_children, self.depth + 1); // Increment depth
-                let mut key_clone = key.clone();
-                let mut value_clone = value.clone();
-                new_node.insert(key_clone, value_clone, max_depth - 1); // Decrement max_depth
-                if self.children.len() < self.max_children {
-                    self.children.insert(index, Entry::InternalNode(new_node));
-                } else if self.children.len() == self.max_children {
-                    self.split_and_insert(new_node);
-                    println!(
-                        "Split and Inserted Internal Node at Depth {}: Key: {:?}",
-                        self.depth, key
-                    );
-                }
-            }
-        }
-    }
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
+        println!("Inserting key of length: {}", key.len());
+        println!("Current key: {:?}", key);
     
+        let mut current_node = self;
+    
+        for depth in 0..max_depth {
+            if depth == key.len() {
+                let new_leaf = Entry::Leaf(LeafNode { key: key.clone(), value });
+                println!("Created a new LeafNode for key: {:?}", key);
+                current_node.children.push(new_leaf);
+                return;
+            }
+    
+            let prefix = key[depth];
+            let position = current_node.children.iter().position(|child| match child {
+                Entry::InternalNode(node) => node.key[0] == prefix,
+                Entry::Leaf(leaf) => leaf.key[depth] == prefix,
+            });
+    
+            match position {
+                Some(index) => {
+                    let child = current_node.children.remove(index);
+                    match child {
+                        Entry::InternalNode(mut node) => {
+                            current_node.children.insert(index, Entry::InternalNode(node)); // Reinsert the node
+                            current_node = match current_node.children.get_mut(index).unwrap() {
+                                Entry::InternalNode(node) => node,
+                                _ => panic!("Expected an InternalNode!"),
+                            };
+                        },
+                        Entry::Leaf(leaf) => {
+                            if leaf.key == key {
+                                current_node.children.insert(index, Entry::Leaf(LeafNode { key: key.clone(), value }));
+                            } else {
+                                let mut new_internal_node = Node::new(vec![prefix], current_node.max_children, depth + 1);
+                                println!("Created Internal Node at depth: {}", new_internal_node.depth);
+    
+                                new_internal_node.children.push(Entry::Leaf(leaf));
+                                new_internal_node.children.push(Entry::Leaf(LeafNode { key: key.clone(), value }));
+                                println!("Created a new LeafNode for key: {:?}", key);
+    
+                                current_node.children.insert(index, Entry::InternalNode(new_internal_node));
+                            }
+                            return;
+                        }
+                    }
+                },
+                None => {
+                    let new_node = Node::new(vec![prefix], current_node.max_children, depth + 1);
+                    println!("Created Internal Node at depth: {}", new_node.depth);
+                    current_node.children.push(Entry::InternalNode(new_node));
+                    current_node = match current_node.children.last_mut().unwrap() {
+                        Entry::InternalNode(node) => node,
+                        _ => panic!("Expected an InternalNode!"),
+                    };
+                }
+            }
+        }
+    }    
+      
 }
 
 pub struct VerkleTree<F, P, PC>
@@ -235,12 +229,12 @@ where
     }
     
 
-    pub fn get(&self, key: Vec<u8>) -> Option<&Vec<u8>> {
+    pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         self.root.get(key)
     }
 
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.root.insert(key, value, 0);
+        self.root.insert(key, value, self.max_depth);
 
     }
 }
@@ -273,13 +267,47 @@ mod tests {
     fn test_insert_and_get_single_value() {
         let mut tree = setup_tree();
 
-        let key = hex::decode("a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9").expect("Failed to decode hex string");
+        let key = hex::decode("4cc").expect("Failed to decode hex string");
         let value = vec![13, 14, 15];
 
         tree.insert(key.clone(), value.clone());
 
         let retrieved_value = tree.get(key.clone());
-        assert_eq!(retrieved_value, Some(&value));
+        assert_eq!(retrieved_value, Some(value));
+    }
+    #[test]
+    fn test_insert_and_get_multiple_values() {
+        let mut tree = setup_tree();
+
+        let key1 = hex::decode("4cc4").expect("Failed to decode hex string");
+        let value1 = vec![13, 14, 15];
+
+        let key2 = hex::decode("9cd9").expect("Failed to decode hex string");
+        let value2 = vec![1, 2, 3, 4];
+
+        tree.insert(key1.clone(), value1.clone());
+        tree.insert(key2.clone(), value2.clone());
+
+        let retrieved_value1 = tree.get(key1.clone());
+        let retrieved_value2 = tree.get(key2.clone());
+
+        assert_eq!(retrieved_value1, Some(value1));
+        assert_eq!(retrieved_value2, Some(value2));
+    }
+
+    #[test]
+    fn test_insert_and_get_nonexistent_key() {
+        let mut tree = setup_tree();
+
+        let key1 = hex::decode("4cc4").expect("Failed to decode hex string");
+        let value1 = vec![13, 14, 15];
+
+        tree.insert(key1.clone(), value1.clone());
+
+        let key2 = hex::decode("9dc4").expect("Failed to decode hex string");
+        let retrieved_value2 = tree.get(key2.clone());
+
+        assert_eq!(retrieved_value2, None);
     }
 
 }

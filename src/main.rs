@@ -25,18 +25,31 @@ fn main() {
     .expect("Failed to create VerkleTree");
     println!("Created VerkleTree with depth {}, branching factor {}", depth, branching_factor);
 
-    let wallet_address = "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9";
+    let wallet_address = "4cce";
     let key_wallet = hex::decode(wallet_address).expect("Failed to decode hex string");
     
     // Insert the wallet address and its associated value into the tree
     tree.insert(key_wallet.clone(), vec![13, 14, 15]);
     println!("Inserted wallet address \"{}\" with value {:?}", wallet_address, vec![13, 14, 15]);
+
+    let wallet_address2 = "9dcd";
+    let key_wallet2 = hex::decode(wallet_address2).expect("Failed to decode hex string");
     
-    // Retrieve the value associated with the wallet address
-    let retrieved_value = tree.get(key_wallet);
-    match retrieved_value {
+    // Insert the wallet address and its associated value into the tree
+    tree.insert(key_wallet2.clone(), vec![14, 15, 16]);
+    println!("Inserted wallet address \"{}\" with value {:?}", wallet_address2, vec![14, 15, 16]);
+
+    let retrieved_value2 = tree.get(key_wallet);
+    match retrieved_value2 {
         Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
         None => println!("No value found for wallet address {}", wallet_address),
+    }
+    
+    // Retrieve the value associated with the wallet address
+    let retrieved_value = tree.get(key_wallet2);
+    match retrieved_value {
+        Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address2, value),
+        None => println!("No value found for wallet address {}", wallet_address2),
     }
 
 }
