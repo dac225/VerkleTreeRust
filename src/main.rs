@@ -52,6 +52,8 @@ fn main() {
         None => println!("No value found for wallet address {}", wallet_address2),
     }
 
+    tree.print_tree();
+
 }
 
 
