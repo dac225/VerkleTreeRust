@@ -8,6 +8,12 @@ use sha2::{Sha256, Digest}; // Explicitly import the Digest trait
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
 
+// TODOs:
+    // Create functionality to move data from test_data.txt into a trie
+    // reimplement test cases to account for data coming in from another file
+    // explore the commitment and verification process 
+        // everything we need to extract from the trie/nodes
+        // everything we need to produce to open/prove a polynomial
 
 // Set up for Polynomial Commitments using ark library
 type BlsFr = <Bls12_381 as PairingEngine>::Fr;
@@ -178,8 +184,11 @@ where
                 current_node.children.push(new_leaf);
     
                 // Check if a leaf node was successfully inserted
-                if let Some(index) = current_node.children.iter().position(|child| matches!(child, Entry::Leaf(_))) {
+                if let Some(_index) = current_node.children.iter().position(|child| matches!(child, Entry::Leaf(_))) {
                     println!("Leaf node verified at depth: {}, Key: {:?}", depth, key);
+                }
+                else {
+                    println!("Leaf node cannot be verified at depth: {}, Key: {:?}", depth, key)
                 }
                 return; // Insertion is complete
             }
@@ -192,14 +201,15 @@ where
                 Entry::InternalNode(node) => node.key[0] == prefix,
                 Entry::Leaf(leaf) => leaf.key[depth] == prefix,
             });
-    
+            
+            // matching for a child at a specific position
             match position {
                 Some(index) => {
                     // Remove the existing child node from the current node
                     let child = current_node.children.remove(index);
     
                     match child {
-                        Entry::InternalNode(mut node) => {
+                        Entry::InternalNode(node) => {
                             // Reinsert an internal node that matches the prefix
                             println!("Reinserting an Internal Node at depth: {}", node.depth);
                             println!("Node key: {:?}", node.key);
@@ -300,7 +310,6 @@ where
 
     }
 
-    
 }
 
 
@@ -319,6 +328,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let degree = 256;
         let params = MarlinKZG10::<Bls12_381, DensePolynomial<<Bls12_381 as ark_ec::PairingEngine>::Fr>>::setup(degree, None, &mut rng).unwrap();
+        // I need clarification on the syntax of ln 326. More specifically, the .0 at the end of the declaration. -vic
         let committer_key = MarlinKZG10::<Bls12_381, DensePolynomial<<Bls12_381 as ark_ec::PairingEngine>::Fr>>::trim(&params, degree, 0, None).unwrap().0;
 
         let depth = 16;
