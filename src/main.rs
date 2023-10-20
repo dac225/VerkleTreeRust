@@ -4,6 +4,7 @@ use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_bls12_381::Bls12_381;
 use ark_ff::Field;
 use rand::Rng;
+mod data_reader;
 use VerkleTreeRust::VerkleTree;
 
 fn main() {
@@ -25,6 +26,14 @@ fn main() {
     .expect("Failed to create VerkleTree");
     println!("Created VerkleTree with depth {}, branching factor {}", depth, branching_factor);
 
+    let file_path = "test_data.txt";
+    let data = data_reader::read_data_from_file(file_path)
+        .expect("Failed to read data from the file.");
+
+    for (address, balance) in data {
+        println!("Address: {}, Balance: {:?}", address, balance);
+    }
+    
     let wallet_address = "4cce";
     let key_wallet = hex::decode(wallet_address).expect("Failed to decode hex string");
     
