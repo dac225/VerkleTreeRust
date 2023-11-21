@@ -18,7 +18,7 @@ fn main() {
     let committer_key = PC::trim(&params, degree, 0, None).unwrap().0; 
 
     // Create the VerkleTree with the committer key, depth, and branching factor
-    let depth = 16; // Adjust as needed
+    let depth = 40; // Adjust as needed
     let branching_factor = 256; // Adjust as needed
 
     // Create the VerkleTree
@@ -31,7 +31,7 @@ fn main() {
         .expect("Failed to read data from the file.");
 
     for (address, balance) in data {
-        println!("Address: {}, Balance: {:?}", address, balance);
+        println!("Address: {:?}, Balance: {:?}", address, balance);
     }
     
     let wallet_address = "4cce";
