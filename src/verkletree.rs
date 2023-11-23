@@ -23,22 +23,73 @@ where
 {
     /// Create a verkle tree with the given depth and branching factor
     pub fn new(comm_key: PC::CommitterKey, depth: usize, branching_factor: usize) -> Self {
-        panic!("TODO");
+        if depth == 0 {
+            VerkleTree::Node {
+                commitment: None,
+                value: None,
+                children: Vec::new(),
+            }
+        } else {
+            let mut children = Vec::with_capacity(branching_factor);
+            for _ in 0..branching_factor {
+                children.push(VerkleTree::new(comm_key.clone(), depth - 1, branching_factor));
+            }
+            VerkleTree::Node {
+                commitment: None,
+                value: None,
+                children,
+            }
+        }
     }
 
     /// Returns the depth of the tree
     pub fn depth(&self) -> usize {
-        panic!("TODO");
+        match self {
+            VerkleTree::Node { children, .. } => {
+                if children.is_empty() {
+                    0
+                } else {
+                    1 + children[0].depth()
+                }
+            }
+        }
     }
 
     /// Returns the polynomial commitment at the root of the tree
     pub fn root(&self) -> PC::Commitment {
-        panic!("TODO");
+        match self {
+            VerkleTree::Node {
+                commitment: Some(commitment),
+                ..
+            } => commitment.clone(),
+            _ => panic!("Root commitment not computed."),
+        }
     }
 
     /// Add an element to the tree at the given position
     pub fn insert(&mut self, position: usize, x: F) {
-        panic!("TODO");
+        match self {
+            VerkleTree::Node {
+                commitment: Some(_),
+                value: Some(_),
+                ..
+            } => {
+                panic!("Inserting into a leaf node with existing commitment and value.")
+            }
+            VerkleTree::Node {
+                commitment,
+                value,
+                children,
+            } => {
+                if position == 0 {
+                    *value = Some(x);
+                    *commitment = None; // Reset commitment when value is updated
+                } else {
+                    let child_position = (position - 1) % children.len();
+                    children[child_position].insert((position - 1) / children.len(), x);
+                }
+            }
+        }
     }
 
     /// Batch-open the verkle tree at the given set of positions
@@ -83,14 +134,19 @@ where
 // TODO: Define a type VerkleTree<F, P, PC> representing a Verkle tree with leaves
 // of type F that uses the polynomial commitment scheme PC.
 enum VerkleTree<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> {
-    TODO(F, P, PC),
+    Node {
+        commitment: Option<PC::Commitment>,
+        value: Option<F>,
+        children: Vec<VerkleTree<F, P, PC>>,
+    },
 }
 
 // TODO: Define a struct VerkleProof, which will be a Verkle opening proof for multiple field
 // elements
 struct VerkleProof<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> {
-    // Just here to get rid of the unused variable warning
-    todo: (F, P, PC),
+    sibling_commitments: Vec<PC::Commitment>,
+    is_left: Vec<bool>,
+    combined_commitment: PC::Commitment,
 }
 
 use ark_bn254::{Bn254, Fr};
