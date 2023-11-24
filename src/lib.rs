@@ -1,9 +1,9 @@
 use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
 use ark_ec::PairingEngine;
-use ark_ff::{Field, PrimeField};
+use ark_ff::{Field, PrimeField, quadratic_extension};
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
-use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel};
+use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel, LabeledPolynomial, LabeledCommitment};
 use sha2::{Sha256, Digest}; // Explicitly import the Digest trait
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
@@ -161,8 +161,7 @@ where
         None
     }
     
-    
-      
+    /// Inserts a key-value pair into the tree from the current node 
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
         // Print debug messages for the insertion process
         println!("Inserting key of length: {}", key.len());
@@ -260,7 +259,6 @@ where
             }
         }
     }    
-    
 }
 
 pub struct VerkleTree<F, P, PC>
@@ -278,12 +276,21 @@ where
     pub max_depth: usize,
 }
 
+// TODO: Define a struct VerkleProof, which will be a Verkle opening proof for multiple field
+// elements
+pub struct VerkleProof<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> {
+    sibling_commitments: Vec<PC::Commitment>, // the commitments of the siblings of each level of the path
+    path: Vec<u8>, // the path from the root to the leaf (the hash of the key)
+    combined_commitment: PC::Commitment, // root commitment
+}
+
 impl<F, P, PC> VerkleTree<F, P, PC>
 where
     F: Field,
     P: Polynomial<F>,
     PC: PolynomialCommitment<F, P>,
 {
+    /// Create a verkle tree with the given depth and branching factor
     pub fn new(
         comm_key: PC::CommitterKey,
         depth: usize,
@@ -297,21 +304,139 @@ where
         })
     }
     
+    /// Prints the tree
     pub fn print_tree(&self) {
         self.root.print_tree();
     }
     
+    /// Returns the value of the key if it exists in the tree
     pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         self.root.get(key)
     }
 
+    /// Inserts a key-value pair into the tree
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
         self.root.insert(key, value, self.max_depth);
 
     }
 
+    /// Returns the depth of the tree
+    pub fn depth(&self) -> usize {
+        self.max_depth
+    } 
+
+    /// Returns the polynomial commitment at the root of the tree
+    pub fn root(&self) -> PC::Commitment {
+        self.root.commitment.clone().unwrap()
+    }
+
+    pub fn set_commitments(&self, ck: &PC::CommitterKey) {
+        // 0.1 walk through each level of the tree from depth 32 (length of a sha256 hash of the key/address) to root, 
+            // setting the commitments as we move from node to node within each depth level, only moving up a depth level after
+            // all nodes at the current depth level have been committed to
+
+        // to do this, we need to be able to track the internal/leaf nodes at each level of the tree
+        // I'm thinking we can do this through the keys of the nodes that were inserted into the tree.
+        // For example, each of the nodes has a key that is a subset of the 32 u8 hash of the address from the test_data.txt file. 
+        // My initial idea is not the most efficient, but if we store the hashes of the keys, we'll be able to use a modified get() method 
+        // to retrieve the nodes at the level of the tree corresponding with the last element in the hash. For example, if we use the
+        // complete hash of the address, we'll be able to retrieve the corresponding leaf node. If we use the hash of the first 31 bytes,
+        // we'll be able to retrieve the corresponding internal node which will be the parent of the prior leaf node. 
+
+        // For this to work, we will therefore need to iterate through all of the hashes, setting commitments for each get(hash) call and 
+        // storing a new search_hash which will be the sha_256_hash[0..i-1]. Once the list of hashes for this level of the tree/this length of substring,
+        // we can move on to the next level of the tree which necessitates a new search and commit phase
+
+        // ~~~~~~~~~~~~~~~~~~~ How to create commitments ~~~~~~~~~~~~~~~~~~~~~~~~
+        // All of the following will be one iteration of a loop which will need to apply to all nodes in the tree iterated through as described above
+        //
+        // 1. we need to represent each node as a polynomial of degree d-1 for d children for each node. 
+        // 1.1 to do this, we need to create a method that will turn a node into a polynomial using the Polynomal<F> P trait
+        // 1.2 to create a polynomial, we can utilize the ark_works method "ark_poly_commit::DenseUVPolynomial::from_coefficients_vec(coefficients)"
+        // 1.2.1 the documentation to this method can be found here: 
+            // https://docs.rs/ark-poly-commit/latest/ark_poly_commit/trait.DenseUVPolynomial.html#tymethod.from_coefficients_vec
+        // 1.3 we will need to create a vector of coefficients for each node to provide as input for the above function.
+        // 1.3.1 I am wondering what to pass in as the coefficients for each node in order to create the polynomial. We could either use the value of 
+            // the children nodes or the hash value (the prefix) of the children nodes, whichever is easier to implement.
+        // 1.3.2 Regardless of what we use as the coefficients, we need to create a vector of coefficients with the commiting node's value/prefix
+            // as the first element in the vector
+        // 1.3.3 When the vector of coefficients is created, we can then utilize the from_coefficients_vec(coefficients) method to create a polynomial 
+        //
+        // 2. I believe that we should be able to use the ark_poly_commit::commit(&committer_key, &polynomial, rng) method to create commitments
+        // 2.1 we need to apply this method to all the nodes to compute their commitments.
+        // 2.1.1 I believe that we can traverse the tree from depth d to root, finishing the creation of all commitments at depth d before moving to 
+            // depth d-1 by utilizing the search pattern I described above using the hashed-keys of the nodes.
+        // 2.1.2 we can use the from_coefficients_vec(coefficients) method to create a polynomial for each node.
+            // We can then use the commit(&committer_key, &polynomial, rng) method to create a commitment for each node which will be stored in the
+            // node.commitment field
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        panic!("TODO");
+
+    }
+
+    /// Open the verkle tree at the given set of positions
+    pub fn open_commitments(&self, position: Vec<usize>) -> Option<(Vec<F>, Vec<VerkleProof<F, P, PC>>)> {
+        // I believe that we can use the provided method ark_poly_commit::PolynomialCommitment::bath_open() which takes the following: 
+            // ck: &Self::ComitterKey, 
+            // labeled_polynomials:  
+
+        // ~~~~~~~~~~~~~~~~~ How to make a VerkleProof ~~~~~~~~~~~~~~~~~~~~~~~~
+        // We have a VerkleProof struct that was given by the O1 Labs team. It has three fields: sibling_commitments, path, and combined_commitment
+        //
+        // sibling_commitments: vector of commitments to the siblings of each level of the path
+        // path: the path from the root to the leaf (the hash of the key)
+        // combined_commitment: the root commitment 
+        //
+        // We will then need to create a sibling_commitments vector element for our Node object. 
+        // This will be a vector of commitments to the siblings of each node of each level of the path.
+        // We will also need to create a method that will return the sibling commitments at each level of the path
+        // This will be a vector of vectors of commitments at each level of the path that the verifier will use in conjunction
+        // with the given path and combined commitment to verify the proof of membership.
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        panic!("TODO");
+    }
+
+    /// Prove that the given value is in the tree at the given position
+    pub fn check_commitments(&self, position: Vec<usize>, value: Vec<F>, proof: Vec<VerkleProof<F, P, PC>>) -> bool {
+        panic!("TODO");
+    }
+
+    pub fn proof_of_membership() {
+        // Before this method is called, a verkle tree must have already been created and set_commitments() should have already been executed
+
+        // first we need to ask the user for a key/address to search for
+        // then we need to hash the key/address
+        // then we need to use the get() method to retrieve the node at the level of the tree corresponding with the last element in the hash
+        // then we need to find a way to communicate to the open_commitments() method which node to open which is communicated based on 
+
+        panic!("TODO");
+    }
 }
 
+
+pub trait ToFieldElements<F: Field> {
+    // Just stipulates a method for converting a polynomial commitment into an vector of field
+    // elements.
+    fn to_field_elements(&self) -> Vec<F>;
+}
+
+impl<'a, 'b, P, E> ToFieldElements<P::ScalarField>
+    for ark_poly_commit::marlin::marlin_pc::Commitment<E>
+where
+    P: SWModelParameters,
+    E: PairingEngine<Fq = P::BaseField, G1Affine = SWAffine<P>>,
+    P::ScalarField: PrimeField,
+    P::BaseField: PrimeField<BigInt = <P::ScalarField as PrimeField>::BigInt>,
+{
+    fn to_field_elements(&self) -> Vec<P::ScalarField> {
+        // We don't use degree bounds, and so ignore the shifted part of the commitments
+        let _ = self.shifted_comm;
+        [self.comm.0.x, self.comm.0.y]
+            .iter()
+            .map(|a| P::ScalarField::from_repr(a.into_repr()).unwrap())
+            .collect()
+    }
+}
 
 
 #[cfg(test)]
