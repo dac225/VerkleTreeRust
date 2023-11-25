@@ -330,6 +330,52 @@ where
         self.root.commitment.clone().unwrap()
     }
 
+    // ~ Below are notes on two methods from the poly_commit library that I believe we will need to use that don't need to be wrapped in another method ~
+    // I see that they are already being called in the main.rs file, but we need to also get the verifier_key from the setup
+
+    // I believe we will also need to call ark_poly_commit::PolynomialCommitment::setup() at some point in the initialization of the verkle tree.
+    // The documentation to this method: https://docs.rs/ark-poly-commit/latest/ark_poly_commit/trait.PolynomialCommitment.html#tymethod.setup
+    // This method takes the following parameters:
+        // max_degree: usize,
+            // This is the maximum degree of the polynomial that will be committed to
+            // This can be set to the branching factor of the tree
+        // num_vars: Option<usize>,
+            // This is the number of variables in the polynomial. If this is None, then the polynomial is univariate
+            // This can be set to None
+        // rng: &mut R,
+            // This is the random number generator that will be used to generate the parameters
+            // This can be set to &mut rand::thread_rng()
+    // This method will return a result of one of the following:
+        // params: Self::UniversalParams,
+            // This is the universal parameters that will be used to create the committer key and verifier key
+        // error: Self::Error
+            // This is the error that will be returned if the setup fails
+
+    // I believe we will also need to call ark_poly_commit::PolynomialCommitment::trim() at some point in the initialization of the verkle tree.
+    // The documentation to this method: https://docs.rs/ark-poly-commit/latest/ark_poly_commit/trait.PolynomialCommitment.html#tymethod.trim
+    // This method will turn the universal parameters that were created by the setup() method into a committer key and verifier key
+    // This method takes the following parameters:
+        // pp: &Self::UniversalParams,
+            // This is the universal parameters that were created by the setup() method
+        // suported_degree: usize,
+            // This is the maximum degree of the polynomial that will be committed to
+            // This can be set to the branching factor of the tree
+        // supported_hiding_bound: usize,
+            // This is the maximum number of queries that will be made to the polynomial
+            // This can be set to the supported_degree-1 of the polynomial
+        // enforced_degree_bound: Option<usize>,
+            // This is the degree bound that will be enforced on the polynomial
+            // This can be set to None for now (I'm not quite sure how setting this affects the polynomial commitment)
+    // This method will return a resuklt of one of the following:
+        // (ck, vk): (Self::CommitterKey, Self::VerifierKey),
+            // This is the committer key and verifier key that will be used to create commitments and verify proofs
+        // error: Self::Error
+            // This is the error that will be returned if the trim fails
+    
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    // ~~~~~ Below are notes on the methods that I believe we will need to create to implement the verkle tree ~~~~~~~
+
     pub fn set_commitments(&self, ck: &PC::CommitterKey) {
         // 0.1 walk through each level of the tree from depth 32 (length of a sha256 hash of the key/address) to root, 
             // setting the commitments as we move from node to node within each depth level, only moving up a depth level after
@@ -363,6 +409,10 @@ where
         // 1.3.3 When the vector of coefficients is created, we can then utilize the from_coefficients_vec(coefficients) method to create a polynomial 
         //
         // 2. I believe that we should be able to use the ark_poly_commit::commit(&committer_key, &polynomial, rng) method to create commitments
+        // The documentation to this method can be found here:
+            // https://docs.rs/ark-poly-commit/latest/ark_poly_commit/trait.PolynomialCommitment.html#tymethod.commit
+        // N.B. This method will return a vector of labeled commitments and a vector of randomness. We will need to store both of these somewhere,
+            // most probably the node, I think. We will need both vectors to open the commitments later on.
         // 2.1 we need to apply this method to all the nodes to compute their commitments.
         // 2.1.1 I believe that we can traverse the tree from depth d to root, finishing the creation of all commitments at depth d before moving to 
             // depth d-1 by utilizing the search pattern I described above using the hashed-keys of the nodes.
@@ -374,12 +424,8 @@ where
 
     }
 
-    /// Open the verkle tree at the given set of positions
-    pub fn open_commitments(&self, position: Vec<usize>) -> Option<(Vec<F>, Vec<VerkleProof<F, P, PC>>)> {
-        // I believe that we can use the provided method ark_poly_commit::PolynomialCommitment::bath_open() which takes the following: 
-            // ck: &Self::ComitterKey, 
-            // labeled_polynomials:  
-
+    /// This method will be used to populate a verkle proof struct that will be opened and checked
+    pub fn prepare_verkleproof() {
         // ~~~~~~~~~~~~~~~~~ How to make a VerkleProof ~~~~~~~~~~~~~~~~~~~~~~~~
         // We have a VerkleProof struct that was given by the O1 Labs team. It has three fields: sibling_commitments, path, and combined_commitment
         //
@@ -393,6 +439,103 @@ where
         // This will be a vector of vectors of commitments at each level of the path that the verifier will use in conjunction
         // with the given path and combined commitment to verify the proof of membership.
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // TODO:
+            // figure out the best way to get the sibling commitments for each node
+            // figure out how to integrate the verkle-proof with the open_commitments() and check_commitments() methods
+            // Naively, I am thinking that we just need to open and check the sibling_commitments and combined_commitment with the path
+            // We still need to make sure we can find the randomness used to create all these commitments for use in the open_commitments() method
+        panic!("TODO");
+    }
+
+    /// Open the verkle tree at the given set of positions
+    pub fn open_commitments(&self, position: Vec<usize>) -> Option<(Vec<F>, Vec<VerkleProof<F, P, PC>>)> {
+        // I believe that we can use the provided method ark_poly_commit::PolynomialCommitment::bath_open() which takes the following: 
+            // ck: &Self::ComitterKey, 
+                // this will be the committer key that we create when setting up the verkletree
+            // labeled_polynomials: impl IntoIterator<Item = &'a LabeledCommitment<Self::Commitment>>,
+                // The struct documentation to create a labeled polynomial = https://docs.rs/ark-poly-commit/latest/ark_poly_commit/data_structures/struct.LabeledPolynomial.html
+
+                // a labeled polynomial is a polynomial along with information about its optional 
+                    // degree bound (the number of coefficients/children of the node), and the maximum number of queries that will 
+                    // be made to the polynomial. The maximum number of queries that will be made will determin the amount of protection to information
+                    // hiding that will pe provided for a commitment for this polynomial. Typically, a greater amount of queries allows the verifier
+                    // to be more certain of a commitment's correctness because the Shwartz-Zippel lemma will be more likely to hold probablistically,
+                    // but it will also allow the verifier to learn more about the polynomial. 
+                    
+                // a labeled polynomial has the following fields:
+                    // label: PolynomialLabel,
+                        // this is simply a string to literally label the polynomial for identification
+                    // polynomial: P,   
+                        // this is the polynomial that we will create using the method set_commitments() method described above
+                    // degree_bound: Option<usize>,
+                        // this is the degree bound / number of children of the node or coefficients of the polynomial
+                    // hiding_bound: Option<usize> 
+                        // This is the maximum number of queries that will be made to the polynomial.
+                        // A higher hiding bound means that it will bne more difficult for the verifier to learn information about the polynomial
+                        // which means that the verifier will be more certain that the prover is not cheating, but this also means that the verifier
+                        // will take more time to verify the proof. I am still trying to determine what the best number would be, but from what I 
+                        // remember, the number of queries can be set to the degree-1 of the polynomial for each polynomial.
+
+            // query_set: &QuerySet<P::Point>,
+                // The struct documentation to cretae a query set = https://docs.rs/ark-poly-commit/latest/ark_poly_commit/type.QuerySet.html
+                
+                // A query set is the set of queries which will be made to the set of labeled polynomials
+                    // A query set is composed of a rust BTreeSet<(String, (String, P))> where P in our case is a Point in our field.
+                    // Each element of the query set is a pair of a String polynomial_label and a query point composed of a label and 
+                        // the actual point (String point_label, P point).
+                    // String point_label is just used for identification purposes, 
+                        // and P point is the location that p[polynomial_label] is to be queried at.
+                    // we can create a query set by creating a BTreeSet and then adding elements to it using the insert() method
+                    // we can create a point by using the ark_ff::Field::rand() method which will return a random field element
+                // Some psuedocode for creating a query_set
+                    // query_set = BTreeSet::new();
+
+                    // for _ in 0..query_num {
+                    //      rng = rand::thread_rng();
+                    //      polynomial_label = "some string";
+                    //      point_label = "some string";
+                    //      point = <F as Field>::rand(&mut rng);
+                    //      query_set.insert((polynomial_label, (point_label, point)));
+                    // }
+
+                    // we will need to create a query set for each node in the tree that we are opening
+                    // the number of nodes that we are opening will be determined by the proof we are constructing (i.e. proof of membership vs
+                        // proof of non-membership)
+
+            // challenge_generator: &mut ChallengeGenerator<F, S>,
+                // This generates opening challenges for the polynomial commitment scheme using either a multivariate or univariate strategy
+                // For our purposes, I believe we will be using the univariate strategy
+                // The documentation for this can be found here: https://docs.rs/ark-poly-commit/latest/ark_poly_commit/struct.ChallengeGenerator.html
+                // To create a new univariate challenge generator, we will need to create a cryptographic sponge using the ark_sponge crate
+                // Documentation for this crate provided here: https://docs.rs/ark-sponge/latest/ark_sponge/
+                
+                // To create a new sponge, we will need the following crates:
+                    // ark_sponge::poseidon::PoseidonSponge;
+                    // ark_ff::fields::PrimeField;
+                    // ark_std::rand::Rng;
+                    // ark_std::rand::thread_rng;
+
+                // What is a sponge?
+                    // For our purposes, a sponge is a cryptographic primitive that can be used to create randomness in the evaluation points
+                    // to be used in opening phase of the polynomial commitment scheme.
+
+                // To create a new sponge, we will need to use the ark_sponge::poseidon::PoseidonSponge::new() method.
+                // First, we will need to create a thread_rng() and then get a random field element using the F as PriemField::rand() method described above
+                // Then, we will need to create a PoseidonSponge using the ark_sponge::poseidon::PoseidonSponge::new() method
+                // Then, we can use the absorb method to absorb the random field element into the sponge
+
+                // Because our polynomial is univariate, we only need to absorb one element from the field into the sponge.
+                // We can then use the sponge to create the challenge generator using the ark_poly_commit::ChallengeGenerator::new_univariate() method
+        
+            // rands: impl IntoIterator<Item = &'a Self::Randomness>,
+                // This is the vector of randomness that was used to commit over the polynomials that we are opening. 
+            // rng: &mut R,
+                // This is the random number generator that will be used to generate the parameters
+
+        // Some of the above parameters need to be implemented in order to be passed into the batch_open() method provided by ark_works.
+        // Most of it will just be organizing data that we already created and have access to into data structures. There is some creation of new
+        // primitives such as the sponge and the query set, but I believe that we should be able to do this with the documentation provided above.
+
         panic!("TODO");
     }
 
@@ -404,10 +547,14 @@ where
     pub fn proof_of_membership() {
         // Before this method is called, a verkle tree must have already been created and set_commitments() should have already been executed
 
-        // first we need to ask the user for a key/address to search for
-        // then we need to hash the key/address
-        // then we need to use the get() method to retrieve the node at the level of the tree corresponding with the last element in the hash
-        // then we need to find a way to communicate to the open_commitments() method which node to open which is communicated based on 
+        // First we need to ask the user for a key/address to search for
+        // Then we need to hash the key/address
+        // Then we need to use the get() method to retrieve the node at the level of the tree corresponding with the last element in the hash
+        // Depending on whether or not we find the key will determine whether we create a proof-of-membership vs a proof-of-non-membership
+        // We need to alert the user whether the key was found or not and what proof we are sending them
+        // The verkle-proof will need to be created using the prepare_verkleproof() method at this point.
+        // we will then need the open_commitments() method to open the commitments at the given position determined by the path vector in the verkle-proof
+        // we will then need the check_commitments() method to check the commitments at the given position determined by the path vector in the verkle-proof
 
         panic!("TODO");
     }
