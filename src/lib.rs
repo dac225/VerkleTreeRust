@@ -541,6 +541,71 @@ where
 
     /// Prove that the given value is in the tree at the given position
     pub fn check_commitments(&self, position: Vec<usize>, value: Vec<F>, proof: Vec<VerkleProof<F, P, PC>>) -> bool {
+        // we will need to use the ark_poly_commit::PolynomialCommitment::batch_check() method which takes the following parameters:
+            // vk: &Self::VerifierKey,
+                // this is the verifier key that we create when setting up the verkletree
+            // labeled_polynomials: impl IntoIterator<Item = &'a LabeledCommitment<Self::Commitment>>,
+                // The struct documentation to create a labeled polynomial = https://docs.rs/ark-poly-commit/latest/ark_poly_commit/data_structures/struct.LabeledPolynomial.html
+
+                // a labeled polynomial is a polynomial along with information about its optional 
+                    // degree bound (the number of coefficients/children of the node), and the maximum number of queries that will 
+                    // be made to the polynomial. The maximum number of queries that will be made will determin the amount of protection to information
+                    // hiding that will pe provided for a commitment for this polynomial. Typically, a greater amount of queries allows the verifier
+                    // to be more certain of a commitment's correctness because the Shwartz-Zippel lemma will be more likely to hold probablistically,
+                    // but it will also allow the verifier to learn more about the polynomial. 
+                    
+                // a labeled polynomial has the following fields:
+                    // label: PolynomialLabel,
+                        // this is simply a string to literally label the polynomial for identification
+                    // polynomial: P,   
+                        // this is the polynomial that we will create using the method set_commitments() method described above
+                    // degree_bound: Option<usize>,
+                        // this is the degree bound / number of children of the node or coefficients of the polynomial
+                    // hiding_bound: Option<usize> 
+                        // This is the maximum number of queries that will be made to the polynomial.
+                        // A higher hiding bound means that it will bne more difficult for the verifier to learn information about the polynomial
+                        // which means that the verifier will be more certain that the prover is not cheating, but this also means that the verifier
+                        // will take more time to verify the proof. I am still trying to determine what the best number would be, but from what I 
+                        // remember, the number of queries can be set to the degree-1 of the polynomial for each polynomial.
+
+            // query_set: &QuerySet<P::Point>,
+                // The struct documentation to cretae a query set = https://docs.rs/ark-poly-commit/latest/ark_poly_commit
+                // A query set is the set of queries which will be made to the set of labeled polynomials
+                    // A query set is composed of a rust BTreeSet<(String, (String, P))> where P in our case is a Point in our field.
+                    // Each element of the query set is a pair of a String polynomial_label and a query point composed of a label and 
+                        // the actual point (String point_label, P point).
+                    // String point_label is just used for identification purposes, 
+                        // and P point is the location that p[polynomial_label] is to be queried at.
+                    // we can create a query set by creating a BTreeSet and then adding elements to it using the insert() method
+                    // we can create a point by using the ark_ff::Field::rand() method which will return a random field element
+            
+            // evaluations: &Evaluations<P::Point, F>,
+                // The struct documentation to create evaluations = https://docs.rs/ark-poly-commit/latest/ark_poly_commit/type.Evaluations.html
+                
+                // What is an evaluation?
+                    // The result of querying a polynomial p at a query set Q.
+                    // It maps an element of Q to the resulting evaluation
+                
+                // What is &Evaluations<P::Point, F>?
+                    // It is a rust BTreeMap<(String, T), F> where (String, T) is a polynomial label and a query point, 
+                        // and F is the evaluation of the polynomial.
+                    
+                    // Put succinctly from the documentation, if (label, query) is an element of Q, 
+                        // then evaluation.get((label, query)) = polynomials[label].evaluate(query)
+                
+                // This means that we need to create a Evaluations (BTreeMap<(String, T), F>) for each proof that we are opening and pass them all
+                    // into the batch_check() method.
+            
+            // proof: &Self::BatchProof,
+                // This is the batch proof that we are checking
+            
+            // challenge_generator: &mut ChallengeGenerator<F, S>,
+                // Refer to the details of the challenge_generator in the open_commitments() method above
+                // This will need to be the same instance of the challenge_generator that was used to open the proof
+
+            // rng: &mut R,
+                // This is the random number generator that will be used to generate the parameters
+
         panic!("TODO");
     }
 

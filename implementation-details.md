@@ -46,7 +46,7 @@ Everything that needs to be done in this Verkle Tree implementation
             * i..k proofs
             * m..n inputs
 
-*** New Notes ***
+*** New Notes (before 11/25/2023) ***
 
 What I see as the way moving forward:
 
@@ -68,5 +68,20 @@ additional verkle tree documentation that I've been trying to use to get a bette
 * https://notes.ethereum.org/@vbuterin/verkle_tree_eip#Illustration
 
 
-            
+*** New Notes (11/25/2023) ***
 
+Flow of the program: https://www.figma.com/file/ImdcFOgC0cZ2tcqLLat3mc/Untitled?type=whiteboard&node-id=1%3A55&t=HQibDEue6VE54kLH-1
+
+Paragraph explanation of flowchart:
+
+1. First, we must get the vector/list of all addresses and values that need to go into the trie. Then we need to hash the addresses and transform these into nodes that will be entered into the tree. We will want to keep the hashed addresses somehow in order to traverse the tree using a modified get() method to set the commitments of the tree properly described in src/lib.rs set_commitments() method. 
+2. We then need to set up the universal parameters and trim them to get our prover and verifier keys. I see that this is already being done in the main.rs file, but we need to ensure that we also gather the verifier key. My input to the details of the implementation of this phase in the program is outlined just above set_commitments() in src/lib.rs.
+3. Next, we need to set the commitments at all of the nodes in order to prepare the root commitment which depends on all prior commitments as 
+
+Blocking tasks:
+1. We need to add a randomness element to the Node struct in order to pass randomness prope
+
+List of TODO's associated with the numbering system in the flowchart above:
+
+Flowchart tasks:
+1. Get the list of addresses and values to be properly inserted into the tree
