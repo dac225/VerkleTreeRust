@@ -62,6 +62,7 @@ where
     pub key: Vec<u8>,
     pub children: Vec<Entry<F, P, PC>>,
     pub commitment: Option<<PC as PolynomialCommitment<F, P>>::Commitment>,
+    pub randomness: Option<<PC as PolynomialCommitment<F, P>>::Randomness>,
     pub max_children: usize,
     pub depth: usize,
 }
@@ -88,6 +89,7 @@ where
             key,
             children: Vec::new(),
             commitment: None,
+            randomness: None,
             max_children,
             depth,
         }
@@ -279,8 +281,8 @@ where
 // TODO: Define a struct VerkleProof, which will be a Verkle opening proof for multiple field
 // elements
 pub struct VerkleProof<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> {
-    sibling_commitments: Vec<PC::Commitment>, // the commitments of the siblings of each level of the path
-    path: Vec<u8>, // the path from the root to the leaf (the hash of the key)
+    sibling_commitments: Vec<Vec<PC::Commitment>>, // the commitments of the siblings of each level of the path
+    path: Vec<PC::Commitment>, // the path from the root to the leaf (the hash of the key)
     combined_commitment: PC::Commitment, // root commitment
 }
 
@@ -604,7 +606,7 @@ where
                 // This will need to be the same instance of the challenge_generator that was used to open the proof
 
             // rng: &mut R,
-                // This is the random number generator that will be used to generate the parameters
+                // This is the random number generator that will be used to generate the parameter
 
         panic!("TODO");
     }
