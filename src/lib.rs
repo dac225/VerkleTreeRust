@@ -450,6 +450,8 @@ where
     }
 
     /// Open the verkle tree at the given set of positions
+    /// Refer to implementation-details.md for more information
+    /// I don't think having an open_commitments() method is necessary. I think we can use open() and check() inside proof-of-membership probably.
     pub fn open_commitments(&self, position: Vec<usize>) -> Option<(Vec<F>, Vec<VerkleProof<F, P, PC>>)> {
         // I believe that we can use the provided method ark_poly_commit::PolynomialCommitment::bath_open() which takes the following: 
             // ck: &Self::ComitterKey, 
@@ -542,6 +544,8 @@ where
     }
 
     /// Prove that the given value is in the tree at the given position
+    /// Refer to implementation-details.md for more information
+    /// I don't think having an open_commitments() method is necessary. I think we can use open() and check() inside proof-of-membership probably.
     pub fn check_commitments(&self, position: Vec<usize>, value: Vec<F>, proof: Vec<VerkleProof<F, P, PC>>) -> bool {
         // we will need to use the ark_poly_commit::PolynomialCommitment::batch_check() method which takes the following parameters:
             // vk: &Self::VerifierKey,
@@ -611,7 +615,37 @@ where
         panic!("TODO");
     }
 
-    pub fn proof_of_membership() {
+    // becauase this will be wrapping open() and check(), we will need the following arguments:
+    // ck: &Self::ComitterKey, --> open()
+    // labeled_polynomials: impl IntoIterator<Item = &'a LabeledCommitment<Self::Commitment>>, --> open()
+    // commitments: impl IntoIterator<Item = &'a Self::Commitment>, --> open() + check()
+    // point (of evaluation): P::Point, --> open() + check()
+    // challenge_generator: &mut ChallengeGenerator<F, S>, --> open() + check()
+    // rands: impl IntoIterator<Item = &'a Self::Randomness>, --> open()
+    // vk: &Self::VerifierKey, --> check()
+    // rng: &mut R, --> open() + check()
+    // proof: &Self::Proof, --> check()
+        // 2 or 3 proofs will be the outputted in total, necessitating 2 or 3 calls to open() and check(). Whether we do open(1), open(2), open(3)
+        // then check(1), check(2), check(3), or open(1), check(1), open(2), check(2), open(3), check(3) is up to us. I'm not sure which is better.
+        //
+        // We could either have a loop within proof_of_membership that will iterate through the proofs and call open() and check() on each one or 
+        // we could just make proof_of_membership() a singular open+check that we loop over in main.rs. We also have to consider how either will affect
+        // how easy the implementation will be. For example, if we loop within proof_of_membership, how will we pass in all polynomials, commitments, 
+        // points, and rands for the 2-3 proofs? And if we loop in main.rs, how will we pass in the 2-3 proofs to proof_of_membership() and have the program
+        // understand how to handle the singular commitment/polynomial/rands for the combined_commitment vs the vectos of those for the path_commitment, 
+        // and the vectors of vectors of those for the sibling_commitments? I think that the latter will be easier to implement, because I think we can
+        // probably implement the iterators to work properly given any of the three options, but then that becomes a can-we-do-what-I-think-we-can-do-with-iterators problem.
+        
+    pub fn proof_of_membership<'a>(
+        ck: &Self::CommitterKey,
+        vk: &Self::VerifierKey,
+        labeled_polynomials: impl IntoIterator<Item = &'a LabeledCommitment<Self::Commitment>>,
+        commitments: impl IntoIterator<Item = &'a Self::Commitment>,
+        point: P::Point,
+        // challenge_generator: &mut ChallengeGenerator<F, S>, --> I think we can make this inside this method to pass into open() and check() instead
+        rands: impl IntoIterator<Item = &'a Self::Randomness>,
+        rng: &mut R,
+    ) {
         // Before this method is called, a verkle tree must have already been created and set_commitments() should have already been executed
 
         // First we need to ask the user for a key/address to search for
