@@ -1,0 +1,1 @@
+VerkleTree<Fp256<FrParameters>, DensePolynomial<Fp256<FrParameters>>, MarlinKZG10<Bls12<ark_bls12_381::Parameters>, DensePolynomial<Fp256<FrParameters>>>>

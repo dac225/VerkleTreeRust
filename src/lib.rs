@@ -1,6 +1,7 @@
-use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
+//use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
 use ark_ec::PairingEngine;
 use ark_ff::{Field, PrimeField};
+use ark_poly::UVPolynomial;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
 use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel};
@@ -45,6 +46,14 @@ pub fn hash(data: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+pub fn hash_to_field<F>(hashed_data: &[u8]) -> F 
+where
+    F: PrimeField, // Add this trait bound
+{
+    F::from_le_bytes_mod_order(hashed_data)
+}
+
+
 // LeafNode Structure
 #[derive(Clone)]
 pub struct LeafNode {
@@ -53,34 +62,31 @@ pub struct LeafNode {
 }
 
 // Node structure
-pub struct Node<F, P, PC>
+pub struct Node<F, PC>
 where
-    F: Field,
-    P: Polynomial<F>,
-    PC: PolynomialCommitment<F, P>,
+    F: PrimeField,
+    PC: PolynomialCommitment<F, DensePolynomial<F>>,
 {
     pub key: Vec<u8>,
-    pub children: Vec<Entry<F, P, PC>>,
-    pub commitment: Option<<PC as PolynomialCommitment<F, P>>::Commitment>,
+    pub children: Vec<Entry<F, PC>>,
+    pub commitment: Option<<PC as PolynomialCommitment<F, DensePolynomial<F>>>::Commitment>,
     pub max_children: usize,
     pub depth: usize,
 }
 
-pub enum Entry<F, P, PC>
+pub enum Entry<F, PC>
 where
-    F: Field,
-    P: Polynomial<F>,
-    PC: PolynomialCommitment<F, P>,
+    F: PrimeField,
+    PC: PolynomialCommitment<F, DensePolynomial<F>>,
 {
-    InternalNode(Node<F, P, PC>),
+    InternalNode(Node<F, PC>),
     Leaf(LeafNode),
 }
 
-impl<F, P, PC> Node<F, P, PC>
+impl<F, PC> Node<F, PC>
 where
-    F: Field,
-    P: Polynomial<F>,
-    PC: PolynomialCommitment<F, P>,
+    F: PrimeField,
+    PC: PolynomialCommitment<F, DensePolynomial<F>>,
 {
     pub fn new(key: Vec<u8>, max_children: usize, depth: usize) -> Self {
         Node {
@@ -122,6 +128,9 @@ where
     }
 
     pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
+        // Hash the key first
+        let hashed_key = hash(&key);
+    
         let mut current_node = self;
         let mut depth = 0;
     
@@ -129,12 +138,12 @@ where
         while let Some(index) = current_node.children.iter().position(|child| {
             match child {
                 Entry::InternalNode(node) => {
-                    // Check if the first key byte of the internal node matches the current key byte
-                    node.key[0] == key[depth]
+                    // Check if the first byte of the internal node's key matches the current byte of the hashed key
+                    node.key.get(0) == hashed_key.get(depth)
                 },
                 Entry::Leaf(leaf) => {
-                    // Check if the leaf node's key matches the target key
-                    leaf.key == key
+                    // Check if the leaf node's key matches the hashed key
+                    leaf.key == hashed_key
                 }
             }
         }) {
@@ -146,98 +155,84 @@ where
                 },
                 Entry::Leaf(leaf) => {
                     println!("Found Leaf Node at depth: {}, Key: {:?}", depth, leaf.key);
-                    if leaf.key == key {
-                        return Some(leaf.value.clone()); // Return the value if the leaf node matches the target key
+                    if leaf.key == hashed_key {
+                        return Some(leaf.value.clone()); // Return the value if the leaf node matches the hashed key
                     } else {
-                        println!("Key mismatch at depth: {}, Expected: {:?}, Actual: {:?}", depth, key, leaf.key);
-                        return None; // Return None if the leaf node key doesn't match the target key
+                        println!("Key mismatch at depth: {}, Expected: {:?}, Actual: {:?}", depth, hashed_key, leaf.key);
+                        return None; // Return None if the leaf node key doesn't match the hashed key
                     }
                 }
             }
         }
     
         // Print a message and return None if traversal stopped without finding a matching leaf node
-        println!("Traversal stopped at depth: {:?}, Key: {:?}", depth, key);
+        println!("Traversal stopped at depth: {:?}, Key: {:?}", depth, hashed_key);
         None
-    }
-    
-    
-      
+    }    
+     
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
+        // Hash the entire key first
+        let hashed_key = hash(&key);
+    
         // Print debug messages for the insertion process
-        println!("Inserting key of length: {}", key.len());
-        println!("Current key: {:?}", key);
+        println!("Inserting key of length: {}", hashed_key.len());
+        println!("Current hashed key: {:?}", hashed_key);
     
         // Start at the root node
         let mut current_node = self;
     
         // Iterate through the depths of the tree
         for depth in 0..max_depth {
-            // If we've reached the end of the key, insert a new leaf node
-            if depth == key.len() {
-                // Create a new leaf node with the provided key and value
-                let new_leaf = Entry::Leaf(LeafNode { key: key.clone(), value: value.clone() });
-                println!("Created a new LeafNode for key: {:?} at depth: {}", key, depth);
+            // If we've reached the end of the hashed key, insert a new leaf node
+            if depth == hashed_key.len() {
+                let new_leaf = Entry::Leaf(LeafNode { key: hashed_key.clone(), value: value.clone() });
+                println!("Created a new LeafNode for hashed key: {:?} at depth: {}", hashed_key, depth);
                 println!("LeafNode value: {:?}", value);
     
-                // Add the new leaf node to the current node's children
                 current_node.children.push(new_leaf);
-    
-                // Check if a leaf node was successfully inserted
-                if let Some(_index) = current_node.children.iter().position(|child| matches!(child, Entry::Leaf(_))) {
-                    println!("Leaf node verified at depth: {}, Key: {:?}", depth, key);
-                }
-                else {
-                    println!("Leaf node cannot be verified at depth: {}, Key: {:?}", depth, key)
-                }
                 return; // Insertion is complete
             }
     
-            // Get the prefix at the current depth
-            let prefix = key[depth];
+            // Get the prefix at the current depth from the hashed key
+            let prefix = hashed_key[depth];
     
             // Find the position of the child node that matches the prefix
             let position = current_node.children.iter().position(|child| match child {
-                Entry::InternalNode(node) => node.key[0] == prefix,
-                Entry::Leaf(leaf) => leaf.key[depth] == prefix,
+                Entry::InternalNode(node) => node.key.get(0) == Some(&prefix),
+                Entry::Leaf(leaf) => leaf.key.get(depth) == Some(&prefix),
             });
-            
-            // matching for a child at a specific position
+    
+            // Handle the matching child node
             match position {
                 Some(index) => {
-                    // Remove the existing child node from the current node
+                    // Existing logic for handling the found node
                     let child = current_node.children.remove(index);
     
                     match child {
                         Entry::InternalNode(node) => {
-                            // Reinsert an internal node that matches the prefix
                             println!("Reinserting an Internal Node at depth: {}", node.depth);
                             println!("Node key: {:?}", node.key);
                             current_node.children.insert(index, Entry::InternalNode(node));
     
-                            // Set the current node to the internal node for further traversal
                             current_node = match current_node.children.get_mut(index).unwrap() {
                                 Entry::InternalNode(node) => node,
                                 _ => panic!("Expected an InternalNode!"),
                             };
                         },
                         Entry::Leaf(leaf) => {
-                            if leaf.key == key {
-                                // Update the value for an existing leaf node with the same key
-                                println!("Updating value for an existing LeafNode with key: {:?}", key);
-                                current_node.children.insert(index, Entry::Leaf(LeafNode { key: key.clone(), value: value.clone() }));
+                            if leaf.key == hashed_key {
+                                println!("Updating value for an existing LeafNode with key: {:?}", hashed_key);
+                                current_node.children.insert(index, Entry::Leaf(LeafNode { key: hashed_key.clone(), value: value.clone() }));
                             } else {
-                                // Create a new internal node and insert both the existing leaf and a new leaf
                                 let mut new_internal_node = Node::new(vec![prefix], current_node.max_children, depth + 1);
                                 println!("Created Internal Node at depth: {}", new_internal_node.depth);
                                 println!("Node key: {:?}", new_internal_node.key);
     
                                 new_internal_node.children.push(Entry::Leaf(leaf));
-                                new_internal_node.children.push(Entry::Leaf(LeafNode { key: key.clone(), value: value.clone() }));
-                                println!("Created a new LeafNode for key: {:?} at depth: {}", key, depth);
+                                new_internal_node.children.push(Entry::Leaf(LeafNode { key: hashed_key.clone(), value: value.clone() }));
+                                println!("Created a new LeafNode for key: {:?} at depth: {}", hashed_key, depth);
                                 println!("LeafNode value: {:?}", value);
     
-                                // Insert the new internal node into the current node's children
                                 current_node.children.insert(index, Entry::InternalNode(new_internal_node));
                             }
                             return; // Insertion is complete
@@ -245,13 +240,11 @@ where
                     }
                 },
                 None => {
-                    // Create a new internal node for the prefix and insert it into the current node's children
                     let new_node = Node::new(vec![prefix], current_node.max_children, depth + 1);
                     println!("Created Internal Node at depth: {}", new_node.depth);
                     println!("Node key: {:?}", new_node.key);
                     current_node.children.push(Entry::InternalNode(new_node));
     
-                    // Set the current node to the newly created internal node for further traversal
                     current_node = match current_node.children.last_mut().unwrap() {
                         Entry::InternalNode(node) => node,
                         _ => panic!("Expected an InternalNode!"),
@@ -259,17 +252,56 @@ where
                 }
             }
         }
-    }    
+    }
+    
+    /// Recursively sets the commitments for this node and its children.
+    pub fn set_commitments_recursive(
+        &mut self, 
+        ck: &PC::CommitterKey,
+        rng: &mut impl RngCore,
+    ) -> Result<(), PC::Error> {
+        let mut coefficients = Vec::new();
+
+        // For each child, hash its key and convert it into a field element
+        for child in &self.children {
+            let child_key = match child {
+                Entry::InternalNode(node) => &node.key,
+                Entry::Leaf(leaf) => &leaf.key,
+            };
+            let child_hash = hash(child_key);
+            let field_element = hash_to_field::<F>(&child_hash);
+            coefficients.push(field_element);
+        }
+
+        // Create a DensePolynomial from coefficients
+        let polynomial = DensePolynomial::from_coefficients_vec(coefficients);
+        let labeled_polynomial = ark_poly_commit::LabeledPolynomial::new("poly".to_string(), polynomial, None, None);
+
+        // Compute the commitment
+        let commitment_result = PC::commit(ck, std::iter::once(&labeled_polynomial), Some(rng))?;
+        let commitment = commitment_result.0.first().cloned().unwrap().commitment().clone();
+
+        // Store the commitment
+        self.commitment = Some(commitment);
+
+        // Recursively set commitments for child nodes
+        for child in &mut self.children {
+            if let Entry::InternalNode(ref mut internal_node) = child {
+                internal_node.set_commitments_recursive(ck, rng)?;
+            }
+        }
+
+        Ok(())
+    }
     
 }
 
-pub struct VerkleTree<F, P, PC>
+pub struct VerkleTree<F, PC>
 where
-    F: Field,
-    P: Polynomial<F>,
-    PC: PolynomialCommitment<F, P>,
+    F: PrimeField,
+    PC: PolynomialCommitment<F, DensePolynomial<F>>,
 {
-    pub root: Node<F, P, PC>,
+    pub root: Node<F, PC>,
     pub params: (
         <KZG10 as PolynomialCommitment<BlsFr, Poly>>::UniversalParams,
         <KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey,
@@ -278,11 +310,10 @@ where
     pub max_depth: usize,
 }
 
-impl<F, P, PC> VerkleTree<F, P, PC>
+impl<F, PC> VerkleTree<F, PC>
 where
-    F: Field,
-    P: Polynomial<F>,
-    PC: PolynomialCommitment<F, P>,
+    F: PrimeField,
+    PC: PolynomialCommitment<F, DensePolynomial<F>>,
 {
     pub fn new(
         comm_key: PC::CommitterKey,
@@ -309,6 +340,14 @@ where
         self.root.insert(key, value, self.max_depth);
 
     }
+    // Public method to set commitments on the tree
+    pub fn set_commitments(&mut self) -> Result<(), PC::Error> {
+        let committer_key = &self.params.1;
+        let mut rng = rand::thread_rng();
+
+        // Start the commitment setting process from the root node
+        self.root.set_commitments_recursive(committer_key, &mut rng)
+    }
 
 }
 
@@ -318,25 +357,26 @@ where
 mod tests {
     use super::*;
     use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
-    use ark_poly_commit::PolynomialCommitment;
-    use ark_poly::polynomial::univariate::DensePolynomial;
+    // use ark_poly_commit::PolynomialCommitment;
+   // use ark_poly::polynomial::univariate::DensePolynomial;
     use ark_bls12_381::Bls12_381;
-    use ark_ff::Field;
-    use rand::Rng;
-
-    fn setup_tree() -> VerkleTree<<Bls12_381 as ark_ec::PairingEngine>::Fr, DensePolynomial<<Bls12_381 as ark_ec::PairingEngine>::Fr>, MarlinKZG10<Bls12_381, DensePolynomial<<Bls12_381 as ark_ec::PairingEngine>::Fr>>> {
+   // use ark_ff::Field;
+    // use rand::Rng;
+    
+    fn setup_tree() -> VerkleTree<BlsFr, MarlinKZG10<Bls12_381, Poly>> {
         let mut rng = rand::thread_rng();
         let degree = 256;
-        let params = MarlinKZG10::<Bls12_381, DensePolynomial<<Bls12_381 as ark_ec::PairingEngine>::Fr>>::setup(degree, None, &mut rng).unwrap();
-        // I need clarification on the syntax of ln 326. More specifically, the .0 at the end of the declaration. -vic
-        let committer_key = MarlinKZG10::<Bls12_381, DensePolynomial<<Bls12_381 as ark_ec::PairingEngine>::Fr>>::trim(&params, degree, 0, None).unwrap().0;
-
+    
+        // Set up the parameters, committer key, and verifier key
+        let (params, committer_key, verifier_key) = setup(degree, None, &mut rng).unwrap();
+    
         let depth = 16;
         let branching_factor = 256;
-
+    
+        // Initialize the VerkleTree with the necessary parameters
         VerkleTree::new(committer_key, depth, branching_factor).expect("Failed to create VerkleTree")
     }
-
+    
     #[test]
     fn test_insert_and_get_single_value() {
         let mut tree = setup_tree();

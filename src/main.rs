@@ -1,39 +1,34 @@
+use ark_ec::PairingEngine;
+use ark_ff::Field;
+use ark_poly::UVPolynomial;
+use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
 use ark_poly_commit::PolynomialCommitment;
-use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_bls12_381::Bls12_381;
-use ark_ff::Field;
 use rand::Rng;
-mod data_reader;
+use sha2::{Sha256, Digest};
+
+// Assuming VerkleTreeRust is the name of your module
 use VerkleTreeRust::VerkleTree;
 
 fn main() {
-    type F = <Bls12_381 as ark_ec::PairingEngine>::Fr;
+    type F = <Bls12_381 as PairingEngine>::Fr;
     type P = DensePolynomial<F>;
     type PC = MarlinKZG10<Bls12_381, P>;
 
     let mut rng = rand::thread_rng();
     let degree = 256;
     let params = PC::setup(degree, None, &mut rng).unwrap();
-    let committer_key = PC::trim(&params, degree, 0, None).unwrap().0; 
+    let (committer_key, verifier_key) = PC::trim(&params, degree, 0, None).unwrap();
 
-    // Create the VerkleTree with the committer key, depth, and branching factor
     let depth = 40; // Adjust as needed
     let branching_factor = 256; // Adjust as needed
 
     // Create the VerkleTree
-    let mut tree: VerkleTree<F, P, PC> = VerkleTree::new(committer_key.clone(), depth, branching_factor)
-    .expect("Failed to create VerkleTree");
+    let mut tree: VerkleTree<F, PC> = VerkleTree::new(committer_key, depth, branching_factor)
+        .expect("Failed to create VerkleTree");
     println!("Created VerkleTree with depth {}, branching factor {}", depth, branching_factor);
 
-    let file_path = "test_data.txt";
-    let data = data_reader::read_data_from_file(file_path)
-        .expect("Failed to read data from the file.");
-
-    for (address, balance) in data {
-        println!("Address: {:?}, Balance: {:?}", address, balance);
-    }
-    
     let wallet_address = "4cce";
     let key_wallet = hex::decode(wallet_address).expect("Failed to decode hex string");
     
@@ -48,23 +43,26 @@ fn main() {
     tree.insert(key_wallet2.clone(), vec![14, 15, 16]);
     println!("Inserted wallet address \"{}\" with value {:?}", wallet_address2, vec![14, 15, 16]);
 
-    let retrieved_value2 = tree.get(key_wallet);
-    match retrieved_value2 {
+    let retrieved_value = tree.get(key_wallet);
+    match retrieved_value {
         Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
         None => println!("No value found for wallet address {}", wallet_address),
     }
     
     // Retrieve the value associated with the wallet address
-    let retrieved_value = tree.get(key_wallet2);
-    match retrieved_value {
+    let retrieved_value2 = tree.get(key_wallet2);
+    match retrieved_value2 {
         Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address2, value),
         None => println!("No value found for wallet address {}", wallet_address2),
     }
 
-    tree.print_tree();
+    // Uncomment the line below if you want to print the tree structure
+    // tree.print_tree();
 
+        // Call set_commitments (if it's a public method of VerkleTree)
+        if let Err(e) = tree.set_commitments() {
+            eprintln!("Error setting commitments: {:?}", e);
+        } else {
+            println!("Commitments set successfully.");
+        }
 }
-
-
-
-
