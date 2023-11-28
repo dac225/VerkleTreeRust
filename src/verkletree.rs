@@ -15,7 +15,27 @@ use ark_bls12_381::Parameters;
 use ark_poly_commit::LabeledCommitment;
 use ark_std::One;
 use ark_serialize::Write;
+// error[E0599]: no method named `compute_commitment` found for struct `VerkleTree` in the current scope
+//   --> src/main.rs:52:23
+//    |
+// 52 |     let commit = tree.compute_commitment();
+//    |                       ^^^^^^^^^^^^^^^^^^ method not found in `VerkleTree<Fp256<FrParameters>, ..., ...>`
+//    |
+//    = note: the full type name has been written to '/Users/michaelgoldfarb/Desktop/VerkleTreeRust/target/debug/deps/VerkleTreeRust-151a4b062914e7c3.long-type-15368198073706428945.txt'
 
+// error[E0599]: no method named `proof_generation` found for struct `VerkleTree` in the current scope
+//   --> src/main.rs:56:33
+//    |
+// 56 | ...of_for_wallet = tree.proof_generation(key_wallet.clone()).expect("Pro...
+//    |                         ^^^^^^^^^^^^^^^^ method not found in `VerkleTree<Fp256<FrParameters>, ..., ...>`
+//    |
+//    = note: the full type name has been written to '/Users/michaelgoldfarb/Desktop/VerkleTreeRust/target/debug/deps/VerkleTreeRust-151a4b062914e7c3.long-type-15368198073706428945.txt'
+
+// error[E0599]: no method named `verify` found for struct `VerkleTree` in the current scope
+//   --> src/main.rs:61:35
+//    |
+// 61 | ...s_verified_wallet = tree.verify(&commit, key_wallet.clone(), vec![13,...
+//    |                             ^^^^^^ method not found in `VerkleTree<Fp256<FrParameters>, ..., ...>`
 
 // Set up for Polynomial Commitments using ark library
 type Fr = <Bls12_381 as PairingEngine>::Fr;
