@@ -1,205 +1,279 @@
-// For this exercise, you will implement a verkle tree, as described
-// here: https://vitalik.ca/general/2021/06/18/verkle.html
-//
-// There is a test which should pass, which you can run with
-//
-//     cargo test
-//
-// There are TODOs throughout the code, which you should fill in appropriately.
-//
-// The task is to define the types VerkleTree and VerkleProof so that you can define the 
-// functions below.
-
-use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
-use ark_ec::PairingEngine;
-use ark_ff::{Field, PrimeField};
+use ark_poly::UVPolynomial;
+use ark_ff::fields::PrimeField;
+use ark_ff::ToBytes;
+use ark_ec::PairingEngine; 
 use ark_poly::polynomial::univariate::DensePolynomial;
-use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
-use ark_poly_commit::{Polynomial, PolynomialCommitment};
+use ark_poly_commit::{marlin_pc::MarlinKZG10, ipa_pc::CommitterKey}; 
+use ark_poly_commit::{PolynomialCommitment, PolynomialLabel};
+use ark_std::rand::Rng;
+use ark_bls12_381::Bls12_381;
+use sha2::{Sha256, Digest};
+use ark_poly_commit::LabeledPolynomial;
+use ark_poly_commit::marlin_pc::{UniversalParams, VerifierKey};
+use ark_ec::bls12::Bls12;
+use ark_bls12_381::Parameters;
+use ark_poly_commit::LabeledCommitment;
+use ark_std::One;
+use ark_serialize::Write;
 
-impl<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> VerkleTree<F, P, PC>
-where
-    PC::Commitment: ToFieldElements<F>,
-{
-    /// Create a verkle tree with the given depth and branching factor
-    pub fn new(comm_key: PC::CommitterKey, depth: usize, branching_factor: usize) -> Self {
-        if depth == 0 {
-            VerkleTree::Node {
-                commitment: None,
-                value: None,
-                children: Vec::new(),
-            }
-        } else {
-            let mut children = Vec::with_capacity(branching_factor);
-            for _ in 0..branching_factor {
-                children.push(VerkleTree::new(comm_key.clone(), depth - 1, branching_factor));
-            }
-            VerkleTree::Node {
-                commitment: None,
-                value: None,
-                children,
-            }
+
+// Set up for Polynomial Commitments using ark library
+type Fr = <Bls12_381 as PairingEngine>::Fr;
+type Poly = DensePolynomial<Fr>;
+
+type KZG10 = MarlinKZG10<Bls12_381, Poly>;
+
+pub fn setup<R: Rng>(degree: usize, rng: &mut R) -> (<KZG10 as PolynomialCommitment<Fr, Poly>>::UniversalParams, <KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey, <KZG10 as PolynomialCommitment<Fr, Poly>>::VerifierKey) {
+    let params = KZG10::setup(degree, None, rng).unwrap();
+    let (committer_key, verifier_key) = KZG10::trim(&params, degree, 0, None).unwrap();
+    (params, committer_key, verifier_key)
+}
+
+
+// hash function (SHA-256 most likely)
+pub fn hash(data: &[u8]) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hasher.finalize().to_vec()
+}
+
+// lets set a fixed width of 256 bits (similar to vitalik's implementation)
+const MAX_CHILDREN: usize = 256;
+
+// Node structure
+pub struct Node {
+    pub key: Vec<u8>,
+    pub value: Option<Vec<u8>>,
+    pub children: Vec<Node>,
+    pub commitment: Option<<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment>,
+}
+
+
+// NEXT STEPS: 
+// - create function for commitments using ark library
+impl Node {
+    pub fn new(key: Vec<u8>) -> Self {
+        Node {
+            key: hash(&key),
+            value: None,
+            children: Vec::new(),
+            commitment: None,  // Initialize the commitment field to None
         }
     }
 
-    /// Returns the depth of the tree
-    pub fn depth(&self) -> usize {
-        match self {
-            VerkleTree::Node { children, .. } => {
-                if children.is_empty() {
-                    0
-                } else {
-                    1 + children[0].depth()
+    pub fn split_and_insert(&mut self, new_node: Node) {
+        let mid = MAX_CHILDREN / 2;
+        let mut new_internal_node = Node::new(self.children[mid].key.clone());
+        new_internal_node.children = self.children.split_off(mid + 1);
+        new_internal_node.children.push(new_node);
+        self.key = new_internal_node.children[0].key.clone();
+        self.children.push(new_internal_node);
+        // Sort the children by their keys
+        self.children.sort_by(|a, b| a.key.cmp(&b.key));
+    }
+
+    pub fn insert(&mut self, mut key: Vec<u8>, value: Vec<u8>) {
+        if key.is_empty() {
+            self.value = Some(value);
+            return;
+        }
+
+        let prefix = key.remove(0);
+        let hashed_prefix = hash(&vec![prefix]);
+        let position = self.children.binary_search_by(|child| child.key.cmp(&hashed_prefix));
+        match position {
+            Ok(index) => {
+                self.children[index].insert(key, value);
+            },
+            Err(index) => {
+                let mut new_node = Node::new(vec![prefix]);
+                new_node.insert(key.clone(), value.clone());
+                if self.children.len() < MAX_CHILDREN {
+                    self.children.insert(index, new_node);
+                } else if self.children.len() == MAX_CHILDREN {
+                    self.split_and_insert(new_node);
+                    // Ensure the children are sorted after the split_and_insert operation
+                    self.children.sort_by(|a, b| a.key.cmp(&b.key));
                 }
             }
         }
     }
 
-    /// Returns the polynomial commitment at the root of the tree
-    pub fn root(&self) -> PC::Commitment {
-        match self {
-            VerkleTree::Node {
-                commitment: Some(commitment),
-                ..
-            } => commitment.clone(),
-            _ => panic!("Root commitment not computed."),
+    pub fn compute_commitment(&mut self, committer_key: &<KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey) -> <KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment {
+        // If the commitment is already computed and stored, return it.
+        if let Some(commitment) = &self.commitment {
+            println!("Using stored commitment: {:?}", commitment);
+            return commitment.clone();
         }
-    }
 
-    /// Add an element to the tree at the given position
-    pub fn insert(&mut self, position: usize, x: F) {
-        match self {
-            VerkleTree::Node {
-                commitment: Some(_),
-                value: Some(_),
-                ..
-            } => {
-                panic!("Inserting into a leaf node with existing commitment and value.")
-            }
-            VerkleTree::Node {
-                commitment,
-                value,
-                children,
-            } => {
-                if position == 0 {
-                    *value = Some(x);
-                    *commitment = None; // Reset commitment when value is updated
-                } else {
-                    let child_position = (position - 1) % children.len();
-                    children[child_position].insert((position - 1) / children.len(), x);
-                }
-            }
+        // If the node is a leaf (no children), compute the commitment based on its value.
+        if self.children.is_empty() {
+            let value_as_bytes = self.value.as_ref().unwrap_or(&Vec::new()).clone();
+            let value_hash = hash(&value_as_bytes);
+            let fr_value = Fr::from_le_bytes_mod_order(&value_hash);
+            let polynomial = Poly::from_coefficients_vec(vec![fr_value]); 
+            let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
+            self.commitment = Some(commitments[0].commitment().clone());
+            println!("Leaf node commitment: {:?}", self.commitment);
+            return self.commitment.as_ref().unwrap().clone();
         }
+
+        // If the node has children, compute the commitment based on its children's commitments.
+        let child_commitments: Vec<_> = self.children.iter_mut().map(|child| child.compute_commitment(committer_key)).collect();
+        let concatenated_bytes: Vec<u8> = child_commitments.iter().flat_map(|commitment| {
+            let mut bytes = Vec::new();
+            commitment.write(&mut bytes).unwrap();
+            bytes
+        }).collect();
+
+        let combined_hash = hash(&concatenated_bytes);
+        let fr_value = Fr::from_le_bytes_mod_order(&combined_hash);
+        let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
+        let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
+        self.commitment = Some(commitments[0].commitment().clone());
+        println!("Internal node commitment: {:?}", self.commitment);
+        self.commitment.as_ref().unwrap().clone()
     }
 
-    /// Batch-open the verkle tree at the given set of positions
-    pub fn open(&self, position: Vec<usize>) -> Option<(Vec<F>, VerkleProof<F, P, PC>)> {
-        panic!("TODO");
-    }
-
-    /// Check the correctness of an opening
-    pub fn check(
-        root: PC::Commitment,
-        vk: PC::VerifierKey,
-        (x, proof): (Vec<F>, VerkleProof<F, P, PC>),
+    pub fn verify_commitment(
+        &self,
+        commitment: &<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        siblings: &Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>, // Use the fully-qualified path
+        committer_key: &<KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey,
     ) -> bool {
-        panic!("TODO");
+        // Compute the commitment of the key-value pair
+        let value_hash = hash(&value);
+        let fr_value = Fr::from_le_bytes_mod_order(&value_hash);
+        let polynomial = Poly::from_coefficients_vec(vec![fr_value]);
+        let (commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial, None, None)], None).unwrap();
+        let mut current_commitment = commitments[0].commitment().clone();
+    
+        // Reconstruct the path to the root using the siblings
+        for (sibling, is_left) in siblings.iter().rev() {
+            let mut concatenated_bytes = Vec::new();
+            if *is_left {
+                sibling.write(&mut concatenated_bytes).unwrap();
+                current_commitment.write(&mut concatenated_bytes).unwrap();
+            } else {
+                current_commitment.write(&mut concatenated_bytes).unwrap();
+                sibling.write(&mut concatenated_bytes).unwrap();
+            }
+            println!("Current commitment: {:?}", current_commitment);
+            println!("Combining with sibling: {:?}", sibling);
+            let combined_hash = hash(&concatenated_bytes);
+            let fr_combined = Fr::from_le_bytes_mod_order(&combined_hash);
+            let polynomial_combined = Poly::from_coefficients_vec(vec![fr_combined]);
+            let (combined_commitments, _) = KZG10::commit(committer_key, &[LabeledPolynomial::new("label".into(), polynomial_combined, None, None)], None).unwrap();
+            current_commitment = combined_commitments[0].commitment().clone();
+        }
+    
+        // Check if the reconstructed root matches the provided commitment
+        println!("Reconstructed Commitment: {:?}", current_commitment);
+        println!("Provided Commitment: {:?}", commitment);
+        current_commitment == *commitment
     }
-}
+    
+    
+    pub fn proof_generation(&mut self, key: Vec<u8>, committer_key: &<KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey) -> Option<Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>> {
+        let mut current_node: &mut Node = self;
+        let mut path: Vec<(<MarlinKZG10<Bls12<ark_bls12_381::Parameters>, DensePolynomial<<Bls12<ark_bls12_381::Parameters> as PairingEngine>::Fr>> as PolynomialCommitment<<Bls12<ark_bls12_381::Parameters> as PairingEngine>::Fr, DensePolynomial<<Bls12<ark_bls12_381::Parameters> as PairingEngine>::Fr>>>::Commitment, bool)> = vec![];
+        
+        // Traverse the tree to find the leaf node for the given key
+        // Traverse the tree to find the leaf node for the given key
+        let mut partial_key = key.clone();
+        while !partial_key.is_empty() {
+            let prefix = partial_key.remove(0);
+            let hashed_prefix = hash(&vec![prefix]);
+            let position = current_node.children.binary_search_by(|child| child.key.cmp(&hashed_prefix));
+            
+            match position {
+                Ok(index) => {
+                    // If the node exists, record the siblings and move deeper
+                    for (i, sibling) in current_node.children.iter_mut().enumerate() {
+                        if i != index {
+                            let sibling_commitment = sibling.compute_commitment(committer_key);
+                            path.push((sibling_commitment.clone(), i < index)); // Include position information
+                            println!("Adding sibling commitment at index {}: {:?}", i, sibling_commitment);
+                        }
+                    }
+                    
+                    current_node = &mut current_node.children[index];
+                },
+                Err(_) => return None, // Return None if the key doesn't exist
+            }
+        }
 
-pub trait ToFieldElements<F: Field> {
-    // Just stipulates a method for converting a polynomial commitment into an vector of field
-    // elements.
-    fn to_field_elements(&self) -> Vec<F>;
-}
-
-impl<'a, 'b, P, E> ToFieldElements<P::ScalarField>
-    for ark_poly_commit::marlin::marlin_pc::Commitment<E>
-where
-    P: SWModelParameters,
-    E: PairingEngine<Fq = P::BaseField, G1Affine = SWAffine<P>>,
-    P::ScalarField: PrimeField,
-    P::BaseField: PrimeField<BigInt = <P::ScalarField as PrimeField>::BigInt>,
-{
-    fn to_field_elements(&self) -> Vec<P::ScalarField> {
-        // We don't use degree bounds, and so ignore the shifted part of the commitments
-        let _ = self.shifted_comm;
-        [self.comm.0.x, self.comm.0.y]
-            .iter()
-            .map(|a| P::ScalarField::from_repr(a.into_repr()).unwrap())
-            .collect()
+        println!("Proof for key {:?}: {:?}", key, path);
+        Some(path)
     }
+    
+    
 }
 
-// TODO: Define a type VerkleTree<F, P, PC> representing a Verkle tree with leaves
-// of type F that uses the polynomial commitment scheme PC.
-enum VerkleTree<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> {
-    Node {
-        commitment: Option<PC::Commitment>,
-        value: Option<F>,
-        children: Vec<VerkleTree<F, P, PC>>,
-    },
+pub struct VerkleTree {
+    pub root: Node,
+    pub params: (
+        <KZG10 as PolynomialCommitment<Fr, Poly>>::UniversalParams, 
+        <KZG10 as PolynomialCommitment<Fr, Poly>>::CommitterKey, 
+        <KZG10 as PolynomialCommitment<Fr, Poly>>::VerifierKey
+    ),
 }
 
-// TODO: Define a struct VerkleProof, which will be a Verkle opening proof for multiple field
-// elements
-struct VerkleProof<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> {
-    sibling_commitments: Vec<PC::Commitment>,
-    is_left: Vec<bool>,
-    combined_commitment: PC::Commitment,
-}
 
-use ark_bn254::{Bn254, Fr};
-type Bn254KZG = MarlinKZG10<Bn254, DensePolynomial<Fr>>;
+impl VerkleTree {
 
-pub fn main() {
-    let depth = 2;
-    let branching_factor = 256;
-
-    // TODO
-    let max_degree: usize = panic!("TODO");
-
-    let mut rng = rand::thread_rng();
-    let setup = Bn254KZG::setup(max_degree, None, &mut rng).unwrap();
-    let committer_key: <Bn254KZG as PolynomialCommitment<_, _>>::CommitterKey = panic!("TODO");
-    let verifier_key: <Bn254KZG as PolynomialCommitment<_, _>>::VerifierKey = panic!("TODO");
-
-    let mut verkle_tree = VerkleTree::<Fr, DensePolynomial<Fr>, Bn254KZG>::new(
-        committer_key,
-        depth,
-        branching_factor,
-    );
-
-    let num_entries = 1024;
-
-    // Insert x^2 at position x for x in 0..1024
-    for x in 0..num_entries {
-        verkle_tree.insert(x, Fr::from(x as u64).square());
+    pub fn proof_generation(&mut self, key: Vec<u8>) -> Option<Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>> {
+        self.root.proof_generation(key, &self.params.1)
     }
 
-    // Open only at even entries.
-    let open_at = (0..(num_entries / 2)).map(|x| 2 * x).collect();
-
-    let (opening_values, opening_proof) = verkle_tree.open(open_at).unwrap();
-
-    assert_eq!(open_at.len(), opening_values.len());
-    for (x, y) in open_at.iter().zip(opening_values.iter()) {
-        assert_eq!(Fr::from(*x as u64).square(), *y);
+    pub fn verify(
+        &self,
+        commitment: &<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        siblings: &Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>,
+    ) -> bool {
+        let committer_key = &self.params.1;
+        self.root.verify_commitment(commitment, key, value, siblings, committer_key)
     }
 
-    let root = verkle_tree.root();
-
-    assert!(VerkleTree::<Fr, DensePolynomial<Fr>, Bn254KZG>::check(
-        root,
-        verifier_key,
-        (opening_values, opening_proof)
-    ));
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        crate::test()
+    pub fn new(initial_key: Option<Vec<u8>>) -> Self {
+        let params = setup(MAX_CHILDREN, &mut rand::thread_rng());
+        VerkleTree {
+            root: Node::new(initial_key.unwrap_or_else(Vec::new)),
+            params,
+        }
     }
+    
+
+    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        self.root.insert(key, value);
+    }
+
+    pub fn compute_commitment(&mut self) -> <KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment {
+        self.root.compute_commitment(&self.params.1)
+    }
+
+    pub fn verify_commitment(
+        &self,
+        commitment: &<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        siblings: &Vec<(<KZG10 as PolynomialCommitment<Fr, Poly>>::Commitment, bool)>,
+    ) -> bool {
+        let committer_key = &self.params.1;
+        self.root.verify_commitment(commitment, key, value, siblings, committer_key)
+    }
+
+    pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
+        self.root.get_value(&key);
+    }
+
+    pub fn print_tree(&self) {
+        self.root.print_tree();
+    }
+    
+    
 }

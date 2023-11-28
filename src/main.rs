@@ -48,12 +48,19 @@ fn main() {
     tree.insert(key_wallet2.clone(), vec![14, 15, 16]);
     println!("Inserted wallet address \"{}\" with value {:?}", wallet_address2, vec![14, 15, 16]);
 
-    let retrieved_value2 = tree.get(key_wallet);
-    match retrieved_value2 {
-        Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
-        None => println!("No value found for wallet address {}", wallet_address),
-    }
-    
+    // Commitment
+    let commit = tree.compute_commitment();
+    println!("Commitment after insertion: {:?}", commit);
+
+    // Proof generation
+    let proof_for_wallet = tree.proof_generation(key_wallet.clone()).expect("Proof generation failed");
+    let actual_proof_for_wallet = &proof_for_wallet;
+    println!("Proof for wallet address {}: {:?}", wallet_address, proof_for_wallet);
+
+    // Verify proof
+    let is_verified_wallet = tree.verify(&commit, key_wallet.clone(), vec![13, 14, 15], actual_proof_for_wallet);
+    assert!(is_verified_wallet, "Verification for wallet address {} failed", wallet_address);
+
     // Retrieve the value associated with the wallet address
     let retrieved_value = tree.get(key_wallet2);
     match retrieved_value {
@@ -62,9 +69,4 @@ fn main() {
     }
 
     tree.print_tree();
-
 }
-
-
-
-
