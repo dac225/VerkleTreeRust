@@ -72,17 +72,13 @@ pub enum Entry {
 #[derive(Debug)] 
 pub struct VerkleProof {
     pub path: Vec<VerkleNodeProof>,
-    // Other fields like polynomial evaluations, commitments, etc., as needed
 }
 
 #[derive(Debug)] 
 pub struct VerkleNodeProof {
     pub key: Vec<u8>,
     pub commitment: Option<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Commitment>,
-    // Other necessary fields, like sibling information, polynomial evaluations, etc.
 }
-
-
 
 impl Node {
     pub fn new(key: Vec<u8>, max_children: usize, depth: usize) -> Self {
@@ -416,8 +412,23 @@ impl Node {
 
         Some(VerkleProof { path })
     }
-
-        
+    pub fn proof_of_membership(
+        &self,
+        key: &[u8],
+    ) -> Option<VerkleProof> {
+        // Retrieve the node at the level of the tree using the raw key
+        let node = self.get(key.to_vec());
+    
+        // Generate the Verkle proof based on whether the key is found or not
+        let proof = self.generate_proof(key);
+    
+        match node {
+            Some(_) => println!("Key found, generating proof of membership."),
+            None => println!("Key not found, generating proof of non-membership."),
+        }
+    
+        proof
+    }
     
 }
 
@@ -494,6 +505,12 @@ impl VerkleTree {
         self.root.generate_proof(key)
     }
     
+    pub fn proof_of_membership_for_key(
+        &self,
+        key: &[u8],
+    ) -> Option<VerkleProof> {
+        self.root.proof_of_membership(key)
+    }
 
 }
 

@@ -21,27 +21,27 @@ fn main() {
     let params = KZG10::setup(degree, None, &mut rng).unwrap();
     let (committer_key, verifier_key) = KZG10::trim(&params, degree, 0, None).unwrap();
 
-    let depth = 40;
+    let depth = 130;
     let branching_factor = 256;
 
-    let mut tree = VerkleTree {
-        root: VerkleTreeRust::Node::new(vec![], branching_factor, 0),
-        params: (params, committer_key, verifier_key),
-        max_depth: depth,
-    };
-    println!("Created VerkleTree with depth {}, branching factor {}", depth, branching_factor);
+    // Create a VerkleTree
+    let mut tree = VerkleTree::new(130, 256).expect("Failed to create VerkleTree");
+    println!("Created VerkleTree with depth 130, branching factor 256");
 
     // Inserting values
-    let wallet_address = "4cce";
+    let wallet_address = "fc91428771e2b031cd46b0478ce20a7af0b110d4";
     let key_wallet = hex::decode(wallet_address).expect("Failed to decode hex string");
+    let key_wallet_clone = key_wallet.clone(); // Clone the key
     tree.insert(key_wallet.clone(), vec![13, 14, 15]);
     println!("Inserted wallet address \"{}\" with value {:?}", wallet_address, vec![13, 14, 15]);
 
     let wallet_address2 = "9dcd";
     let key_wallet2 = hex::decode(wallet_address2).expect("Failed to decode hex string");
+    let key_wallet2_clone = key_wallet2.clone(); // Clone the key
     tree.insert(key_wallet2.clone(), vec![14, 15, 16]);
     println!("Inserted wallet address \"{}\" with value {:?}", wallet_address2, vec![14, 15, 16]);
 
+    // Check if the keys are in the tree
     let retrieved_value = tree.get(key_wallet.clone());
     match retrieved_value {
         Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
@@ -82,5 +82,18 @@ fn main() {
         } else {
             println!("No proof generated for key {:?}", hex::encode(&key));
         }
+    }
+
+    // Test the proof of membership for the key "fc91428771e2b031cd46b0478ce20a7af0b110d4"
+    let key_to_search = "fc91428771e2b031cd46b0478ce20a7af0b110d4";
+    let proof = tree.proof_of_membership_for_key(key_to_search.as_bytes());
+
+    match proof {
+        Some(verkle_proof) => {
+            println!("Proof of membership for key {}: {:?}", key_to_search, verkle_proof);
+        },
+        None => {
+            println!("No proof of membership generated for key {}", key_to_search);
+        },
     }
 }
