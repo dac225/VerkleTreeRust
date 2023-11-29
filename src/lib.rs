@@ -62,32 +62,23 @@ pub struct LeafNode {
 }
 
 // Node structure
-pub struct Node<F, PC>
-where
-    F: PrimeField,
-    PC: PolynomialCommitment<F, DensePolynomial<F>>,
-{
+pub struct Node {
     pub key: Vec<u8>,
-    pub children: Vec<Entry<F, PC>>,
-    pub commitment: Option<<PC as PolynomialCommitment<F, DensePolynomial<F>>>::Commitment>,
+    pub children: Vec<Entry>, // Entry now uses BlsFr implicitly
+    pub commitment: Option<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Commitment>,
     pub max_children: usize,
     pub depth: usize,
 }
 
-pub enum Entry<F, PC>
-where
-    F: PrimeField,
-    PC: PolynomialCommitment<F, DensePolynomial<F>>,
-{
-    InternalNode(Node<F, PC>),
+
+pub enum Entry {
+    InternalNode(Node),
     Leaf(LeafNode),
 }
 
-impl<F, PC> Node<F, PC>
-where
-    F: PrimeField,
-    PC: PolynomialCommitment<F, DensePolynomial<F>>,
-{
+
+
+impl Node {
     pub fn new(key: Vec<u8>, max_children: usize, depth: usize) -> Self {
         Node {
             // key: hash(&key),
@@ -257,9 +248,9 @@ where
     /// Recursively sets the commitments for this node and its children.
     pub fn set_commitments_recursive(
         &mut self, 
-        ck: &PC::CommitterKey,
+        ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey,
         rng: &mut impl RngCore,
-    ) -> Result<(), PC::Error> {
+    ) -> Result<(), <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let mut coefficients = Vec::new();
 
         // For each child, hash its key and convert it into a field element
@@ -269,7 +260,7 @@ where
                 Entry::Leaf(leaf) => &leaf.key,
             };
             let child_hash = hash(child_key);
-            let field_element = hash_to_field::<F>(&child_hash);
+            let field_element = hash_to_field::<BlsFr>(&child_hash);
             coefficients.push(field_element);
         }
 
@@ -278,7 +269,7 @@ where
         let labeled_polynomial = ark_poly_commit::LabeledPolynomial::new("poly".to_string(), polynomial, None, None);
 
         // Compute the commitment
-        let commitment_result = PC::commit(ck, std::iter::once(&labeled_polynomial), Some(rng))?;
+        let commitment_result = KZG10::commit(ck, std::iter::once(&labeled_polynomial), Some(rng))?;
         let commitment = commitment_result.0.first().cloned().unwrap().commitment().clone();
 
         // Store the commitment
@@ -296,12 +287,8 @@ where
     
 }
 
-pub struct VerkleTree<F, PC>
-where
-    F: PrimeField,
-    PC: PolynomialCommitment<F, DensePolynomial<F>>,
-{
-    pub root: Node<F, PC>,
+pub struct VerkleTree {
+    pub root: Node,
     pub params: (
         <KZG10 as PolynomialCommitment<BlsFr, Poly>>::UniversalParams,
         <KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey,
@@ -310,13 +297,9 @@ where
     pub max_depth: usize,
 }
 
-impl<F, PC> VerkleTree<F, PC>
-where
-    F: PrimeField,
-    PC: PolynomialCommitment<F, DensePolynomial<F>>,
-{
+
+impl VerkleTree {
     pub fn new(
-        comm_key: PC::CommitterKey,
         depth: usize,
         branching_factor: usize,
     ) -> Result<Self, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
@@ -341,7 +324,7 @@ where
 
     }
     // Public method to set commitments on the tree
-    pub fn set_commitments(&mut self) -> Result<(), PC::Error> {
+    pub fn set_commitments(&mut self) -> Result<(), <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let committer_key = &self.params.1;
         let mut rng = rand::thread_rng();
 
@@ -363,7 +346,7 @@ mod tests {
    // use ark_ff::Field;
     // use rand::Rng;
     
-    fn setup_tree() -> VerkleTree<BlsFr, MarlinKZG10<Bls12_381, Poly>> {
+    fn setup_tree() -> VerkleTree {
         let mut rng = rand::thread_rng();
         let degree = 256;
     
@@ -374,7 +357,7 @@ mod tests {
         let branching_factor = 256;
     
         // Initialize the VerkleTree with the necessary parameters
-        VerkleTree::new(committer_key, depth, branching_factor).expect("Failed to create VerkleTree")
+        VerkleTree::new(depth, branching_factor).expect("Failed to create VerkleTree")
     }
     
     #[test]

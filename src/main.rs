@@ -1,5 +1,4 @@
 use ark_ec::PairingEngine;
-use ark_ff::Field;
 use ark_poly::UVPolynomial;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
@@ -12,21 +11,26 @@ use sha2::{Sha256, Digest};
 use VerkleTreeRust::VerkleTree;
 
 fn main() {
-    type F = <Bls12_381 as PairingEngine>::Fr;
-    type P = DensePolynomial<F>;
-    type PC = MarlinKZG10<Bls12_381, P>;
-
     let mut rng = rand::thread_rng();
     let degree = 256;
-    let params = PC::setup(degree, None, &mut rng).unwrap();
-    let (committer_key, verifier_key) = PC::trim(&params, degree, 0, None).unwrap();
+
+    // Type annotations for MarlinKZG10 and DensePolynomial
+    type Fr = <Bls12_381 as PairingEngine>::Fr;
+    type Poly = DensePolynomial<Fr>;
+    type KZG10 = MarlinKZG10<Bls12_381, Poly>;
+
+    let params = KZG10::setup(degree, None, &mut rng).unwrap();
+    let (committer_key, verifier_key) = KZG10::trim(&params, degree, 0, None).unwrap();
 
     let depth = 40; // Adjust as needed
     let branching_factor = 256; // Adjust as needed
 
     // Create the VerkleTree
-    let mut tree: VerkleTree<F, PC> = VerkleTree::new(committer_key, depth, branching_factor)
-        .expect("Failed to create VerkleTree");
+    let mut tree = VerkleTree {
+        root: VerkleTreeRust::Node::new(vec![], branching_factor, 0), // Initialize depth to 0
+        params: (params, committer_key, verifier_key),
+        max_depth: depth,
+    };
     println!("Created VerkleTree with depth {}, branching factor {}", depth, branching_factor);
 
     let wallet_address = "4cce";
@@ -59,10 +63,10 @@ fn main() {
     // Uncomment the line below if you want to print the tree structure
     // tree.print_tree();
 
-        // Call set_commitments (if it's a public method of VerkleTree)
-        if let Err(e) = tree.set_commitments() {
-            eprintln!("Error setting commitments: {:?}", e);
-        } else {
-            println!("Commitments set successfully.");
-        }
+    // Call set_commitments
+    if let Err(e) = tree.set_commitments() {
+        eprintln!("Error setting commitments: {:?}", e);
+    } else {
+        println!("Commitments set successfully.");
+    }
 }
