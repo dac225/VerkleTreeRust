@@ -119,7 +119,6 @@ impl Node {
             }
         }
     }
-
     pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         // Hash the key first
         let hashed_key = hash(&key);
@@ -161,8 +160,8 @@ impl Node {
         // Print a message and return None if traversal stopped without finding a matching leaf node
         println!("Traversal stopped at depth: {:?}, Key: {:?}", depth, hashed_key);
         None
-    }    
-     
+    }
+    
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
         // Hash the entire key first
         let hashed_key = hash(&key);
@@ -377,8 +376,14 @@ impl Node {
         // Loop until a leaf is found or there are no more nodes to check
         while let Some(child) = current_node.children.iter().find(|&child| {
             match child {
-                Entry::InternalNode(node) => node.key[0] == hashed_key[0], // Modify as needed based on your key structure
-                Entry::Leaf(leaf) => leaf.key == hashed_key,
+                Entry::InternalNode(node) => {
+                    println!("Matching Internal Node: {:?}", node.key);
+                    node.key[0] == hashed_key[0]
+                },
+                Entry::Leaf(leaf) => {
+                    println!("Matching Leaf Node: {:?}", leaf.key);
+                    leaf.key == hashed_key
+                },
                 _ => false,
             }
         }) {
@@ -412,6 +417,7 @@ impl Node {
 
         Some(VerkleProof { path })
     }
+
     pub fn proof_of_membership(
         &self,
         key: &[u8],
@@ -429,6 +435,7 @@ impl Node {
     
         proof
     }
+    
     
 }
 

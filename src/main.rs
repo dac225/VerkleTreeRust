@@ -21,7 +21,7 @@ fn main() {
     let params = KZG10::setup(degree, None, &mut rng).unwrap();
     let (committer_key, verifier_key) = KZG10::trim(&params, degree, 0, None).unwrap();
 
-    let depth = 130;
+    let depth = 40;
     let branching_factor = 256;
 
     // Create a VerkleTree
@@ -64,7 +64,7 @@ fn main() {
         println!("Commitments set successfully.");
     }
 
-    tree.print_commitments();
+    // tree.print_commitments();
 
     let commitments_are_valid = tree.check_commitments();
     println!("All commitments in the tree are valid: {}", commitments_are_valid);
