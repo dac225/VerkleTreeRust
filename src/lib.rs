@@ -4,7 +4,7 @@ use ark_ff::{Field, PrimeField};
 use ark_poly::UVPolynomial;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
-use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel};
+use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel, LabeledCommitment};
 use sha2::{Sha256, Digest}; // Explicitly import the Digest trait
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
@@ -430,6 +430,46 @@ impl Node {
         proof
     }
     
+    fn verify_node_commitment(
+        &self, 
+        ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey
+    ) -> bool {
+        if self.children.is_empty() {
+            // No need to verify commitment for a leaf node or empty node
+            return true;
+        }
+
+        let mut coefficients = Vec::new();
+        for child in &self.children {
+            let child_key = match child {
+                Entry::InternalNode(node) => &node.key,
+                Entry::Leaf(leaf) => &leaf.key,
+            };
+            let child_hash = hash(child_key);
+            let field_element = hash_to_field::<BlsFr>(&child_hash);
+            coefficients.push(field_element);
+        }
+
+        let polynomial = DensePolynomial::from_coefficients_vec(coefficients);
+
+        let labeled_polynomial = ark_poly_commit::LabeledPolynomial::new(
+            "poly".to_string(), 
+            polynomial, 
+            None, 
+            None
+        );
+
+        let recomputed_commitment = match KZG10::commit(ck, std::iter::once(&labeled_polynomial), None) {
+            Ok(commitment) => commitment.0.first().cloned().unwrap().commitment().clone(),
+            Err(_) => return false,
+        };
+
+        match &self.commitment {
+            Some(stored_commitment) => *stored_commitment == recomputed_commitment,
+            None => false,
+        }
+    }
+    
     
 }
 
@@ -505,7 +545,8 @@ impl VerkleTree {
     pub fn generate_proof_for_key(&self, key: &[u8]) -> Option<VerkleProof> {
         self.root.generate_proof(key)
     }
-    
+
+    // Generate a proof of membership for a given key within the Verkle tree.
     pub fn proof_of_membership_for_key(
         &self,
         key: &[u8],
@@ -513,6 +554,72 @@ impl VerkleTree {
         self.root.proof_of_membership(key)
     }
 
+    /// Verify a proof for a given key in the Verkle tree.
+    pub fn verify_proof(
+        &self,
+        key: &[u8],
+        proof: &VerkleProof,
+        vk: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::VerifierKey,
+        opening_challenge: BlsFr,
+        rng: &mut dyn RngCore,
+    ) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
+        if proof.path.is_empty() {
+            return Ok(false);
+        }
+
+        // Recompute the hashed key
+        let hashed_key = hash(key);
+        let point = hash_to_field::<BlsFr>(&hashed_key);
+
+        for node_proof in proof.path.iter() {
+            if let Some(commitment) = &node_proof.commitment {
+                // Derive the expected values at the point
+                let values = self.derive_values_at_point(node_proof, &point)?;
+
+                // Extract or compute the KZG10 proof
+                let kzg_proof = self.extract_kzg_proof(node_proof)?;
+
+                // Create LabeledCommitment
+                let labeled_commitment = LabeledCommitment::new(
+                    "node_key_commitment".to_string(),
+                    commitment.clone(),
+                    None
+                );
+
+                // Prepare labeled commitments and values for the check
+                let labeled_commitments = vec![&labeled_commitment];
+                let values_iter = vec![values];
+
+                // Check the commitment using the KZG10 check function
+                if !KZG10::check(
+                    vk, 
+                    labeled_commitments.into_iter(), 
+                    &point, 
+                    values_iter.into_iter(), 
+                    &kzg_proof, 
+                    opening_challenge, 
+                    Some(rng)
+                )? {
+                    return Ok(false);
+                }
+            } else {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    // Helper methods to derive values and extract proofs
+    fn derive_values_at_point(&self, node_proof: &VerkleNodeProof, point: &BlsFr) -> Result<BlsFr, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
+        // Implement logic to derive values at the given point
+        unimplemented!()
+    }
+
+    fn extract_kzg_proof(&self, node_proof: &VerkleNodeProof) -> Result<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Proof, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
+        // Implement logic to extract or compute the KZG10 proof
+        unimplemented!()
+    }
 }
 
 
