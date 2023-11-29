@@ -1,11 +1,10 @@
-use std::fmt;
 use ark_ec::PairingEngine;
-use ark_ff::{Field, PrimeField};
+use ark_ff::{PrimeField};
 use ark_poly::UVPolynomial;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
-use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel, LabeledCommitment};
-use sha2::{Sha256, Digest}; // Explicitly import the Digest trait
+use ark_poly_commit::{PolynomialCommitment, LabeledCommitment};
+use sha2::{Sha256, Digest}; 
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
 
@@ -62,7 +61,6 @@ pub struct Node {
     pub max_children: usize,
     pub depth: usize,
 }
-
 
 pub enum Entry {
     InternalNode(Node),
@@ -473,6 +471,7 @@ impl Node {
     
 }
 
+
 pub struct VerkleTree {
     pub root: Node,
     pub params: (
@@ -482,7 +481,6 @@ pub struct VerkleTree {
     ),
     pub max_depth: usize,
 }
-
 
 impl VerkleTree {
     pub fn new(
@@ -622,8 +620,6 @@ impl VerkleTree {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -724,6 +720,5 @@ mod tests {
     
         assert_eq!(retrieved_value2, None);
     }
-    
 
 }

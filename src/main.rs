@@ -97,4 +97,8 @@ fn main() {
             println!("No proof of membership generated for key {}", key_to_search);
         },
     }
+
+    let mut new_tree = VerkleTree::new(depth, branching_factor).expect("Failed to create new VerkleTree");
+
+
 }
