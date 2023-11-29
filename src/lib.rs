@@ -163,32 +163,18 @@ impl Node {
     }
     
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
-        // Hash the entire key first
         let hashed_key = hash(&key);
+        println!("Inserting key: {:?}, hashed: {:?}", key, hashed_key);
     
-        // Print debug messages for the insertion process
-        println!("Inserting key of length: {}", hashed_key.len());
-        println!("Current hashed key: {:?}", hashed_key);
-    
-        // Start at the root node
         let mut current_node = self;
-    
-        // Iterate through the depths of the tree
         for depth in 0..max_depth {
-            // If we've reached the end of the hashed key, insert a new leaf node
-            if depth == hashed_key.len() {
-                let new_leaf = Entry::Leaf(LeafNode { key: hashed_key.clone(), value: value.clone() });
-                println!("Created a new LeafNode for hashed key: {:?} at depth: {}", hashed_key, depth);
-                println!("LeafNode value: {:?}", value);
-    
-                current_node.children.push(new_leaf);
-                return; // Insertion is complete
+            if depth >= hashed_key.len() {
+                println!("Reached the end of the hashed key at depth: {}", depth);
+                current_node.children.push(Entry::Leaf(LeafNode { key: hashed_key.clone(), value: value.clone() }));
+                return;
             }
     
-            // Get the prefix at the current depth from the hashed key
             let prefix = hashed_key[depth];
-    
-            // Find the position of the child node that matches the prefix
             let position = current_node.children.iter().position(|child| match child {
                 Entry::InternalNode(node) => node.key.get(0) == Some(&prefix),
                 Entry::Leaf(leaf) => leaf.key.get(depth) == Some(&prefix),
@@ -372,21 +358,23 @@ impl Node {
         let mut current_node = self;
         let mut path: Vec<VerkleNodeProof> = Vec::new();
         let hashed_key = hash(key); // Hash the key if your tree uses hashed keys
+        let mut depth = 0; // Initialize depth to 0
 
         // Loop until a leaf is found or there are no more nodes to check
-        while let Some(child) = current_node.children.iter().find(|&child| {
-            match child {
-                Entry::InternalNode(node) => {
-                    println!("Matching Internal Node: {:?}", node.key);
-                    node.key[0] == hashed_key[0]
-                },
-                Entry::Leaf(leaf) => {
-                    println!("Matching Leaf Node: {:?}", leaf.key);
-                    leaf.key == hashed_key
-                },
-                _ => false,
-            }
-        }) {
+        while depth < hashed_key.len() {
+            let current_byte = hashed_key[depth];
+            let child_option = current_node.children.iter().find(|&child| {
+                match child {
+                    Entry::InternalNode(node) => {
+                        node.key.get(0) == Some(&current_byte)
+                    },
+                    Entry::Leaf(leaf) => {
+                        leaf.key == hashed_key
+                    },
+                    _ => false,
+                }
+            });
+
             // Construct node proof for the current node
             let node_proof = VerkleNodeProof {
                 key: current_node.key.clone(),
@@ -395,18 +383,23 @@ impl Node {
             };
             path.push(node_proof);
 
-            // Check if the current node is the target leaf node
-            if let Entry::Leaf(leaf) = child {
-                if leaf.key == hashed_key {
-                    break; // Stop if the target leaf node is found
+            match child_option {
+                Some(Entry::InternalNode(node)) => {
+                    // Move to the next internal node at the next depth
+                    current_node = node;
+                    depth += 1;
+                },
+                Some(Entry::Leaf(leaf)) => {
+                    // Check if the leaf node's key matches the hashed key
+                    if leaf.key == hashed_key {
+                        break; // Stop if the target leaf node is found
+                    } else {
+                        return None; // Return None if the leaf node key doesn't match the hashed key
+                    }
+                },
+                None => {
+                    return None; // Return None if no matching child is found
                 }
-            }
-
-            // Move to the next node (only if it's an internal node)
-            if let Entry::InternalNode(next_node) = child {
-                current_node = next_node;
-            } else {
-                break; // Stop if it's a leaf but not the target
             }
         }
 
@@ -417,6 +410,7 @@ impl Node {
 
         Some(VerkleProof { path })
     }
+
 
     pub fn proof_of_membership(
         &self,
@@ -526,12 +520,7 @@ impl VerkleTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
-    // use ark_poly_commit::PolynomialCommitment;
-   // use ark_poly::polynomial::univariate::DensePolynomial;
-    use ark_bls12_381::Bls12_381;
-   // use ark_ff::Field;
-    // use rand::Rng;
+
     
     fn setup_tree() -> VerkleTree {
         let mut rng = rand::thread_rng();
@@ -540,7 +529,7 @@ mod tests {
         // Set up the parameters, committer key, and verifier key
         let (params, committer_key, verifier_key) = setup(degree, None, &mut rng).unwrap();
     
-        let depth = 16;
+        let depth = 40;
         let branching_factor = 256;
     
         // Initialize the VerkleTree with the necessary parameters

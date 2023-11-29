@@ -85,8 +85,9 @@ fn main() {
     }
 
     // Test the proof of membership for the key "fc91428771e2b031cd46b0478ce20a7af0b110d4"
-    let key_to_search = "fc91428771e2b031cd46b0478ce20a7af0b110d4";
-    let proof = tree.proof_of_membership_for_key(key_to_search.as_bytes());
+    let key_to_search = "9dcd";
+    let decoded_key_to_search = hex::decode(key_to_search).expect("Failed to decode hex string");
+    let proof = tree.proof_of_membership_for_key(&decoded_key_to_search);
 
     match proof {
         Some(verkle_proof) => {
