@@ -1,4 +1,4 @@
-//use ark_ec::models::{short_weierstrass_jacobian::GroupAffine as SWAffine, SWModelParameters};
+use std::fmt;
 use ark_ec::PairingEngine;
 use ark_ff::{Field, PrimeField};
 use ark_poly::UVPolynomial;
@@ -8,13 +8,6 @@ use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel};
 use sha2::{Sha256, Digest}; // Explicitly import the Digest trait
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
-
-// TODOs:
-    // Create functionality to move data from test_data.txt into a trie
-    // reimplement test cases to account for data coming in from another file
-    // explore the commitment and verification process 
-        // everything we need to extract from the trie/nodes
-        // everything we need to produce to open/prove a polynomial
 
 // Set up for Polynomial Commitments using ark library
 type BlsFr = <Bls12_381 as PairingEngine>::Fr;
@@ -74,6 +67,19 @@ pub struct Node {
 pub enum Entry {
     InternalNode(Node),
     Leaf(LeafNode),
+}
+
+#[derive(Debug)] 
+pub struct VerkleProof {
+    pub path: Vec<VerkleNodeProof>,
+    // Other fields like polynomial evaluations, commitments, etc., as needed
+}
+
+#[derive(Debug)] 
+pub struct VerkleNodeProof {
+    pub key: Vec<u8>,
+    pub commitment: Option<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Commitment>,
+    // Other necessary fields, like sibling information, polynomial evaluations, etc.
 }
 
 
@@ -284,6 +290,134 @@ impl Node {
 
         Ok(())
     }
+
+    pub fn print_commitments(&self, depth: usize) {
+        let indent = "  ".repeat(depth);
+        println!("{}Node at depth {}: {:?}", indent, depth, self.commitment);
+
+        for child in &self.children {
+            match child {
+                Entry::InternalNode(node) => {
+                    node.print_commitments(depth + 1);
+                },
+                Entry::Leaf(leaf) => {
+                    println!("{}Leaf at depth {}: {:?}", indent, depth + 1, leaf.key);
+                },
+            }
+        }
+    }
+
+    /// Checks the commitment of the node.
+    fn check_commitment(
+        &self, 
+        ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey
+    ) -> bool {
+        // Step 1: Recompute the polynomial from the node's data
+        let mut coefficients = Vec::new();
+        for child in &self.children {
+            let child_key = match child {
+                Entry::InternalNode(node) => &node.key,
+                Entry::Leaf(leaf) => &leaf.key,
+            };
+            let child_hash = hash(child_key);
+            let field_element = hash_to_field::<BlsFr>(&child_hash);
+            coefficients.push(field_element);
+        }
+        let polynomial = DensePolynomial::from_coefficients_vec(coefficients);
+
+        // Step 2: Recompute the commitment
+        let labeled_polynomial = ark_poly_commit::LabeledPolynomial::new("poly".to_string(), polynomial, None, None);
+        let recomputed_commitment = match KZG10::commit(ck, std::iter::once(&labeled_polynomial), None) {
+            Ok(commitment) => commitment.0.first().cloned().unwrap().commitment().clone(),
+            Err(_) => return false,
+        };
+
+        // Step 3: Compare the recomputed commitment with the stored one
+        match &self.commitment {
+            Some(stored_commitment) => *stored_commitment == recomputed_commitment,
+            None => false,
+        }
+    }
+
+    pub fn get_path(&self, key: &[u8]) -> Vec<&Node> {
+        let mut path = Vec::new();
+        let mut current_node = self;
+
+        loop {
+            path.push(current_node);
+            if current_node.is_leaf() && current_node.key == key {
+                break;
+            }
+
+            // Determine the next node to move to
+            let next_node = current_node.children.iter().find_map(|child| {
+                match child {
+                    Entry::InternalNode(node) => Some(node),
+                    Entry::Leaf(leaf) if leaf.key == key => Some(current_node),
+                    _ => None,
+                }
+            });
+
+            match next_node {
+                Some(node) => current_node = node,
+                None => break, // Key not found, return the path so far
+            }
+        }
+
+        path
+    }
+
+    // Helper method to check if a node is a leaf
+    fn is_leaf(&self) -> bool {
+        self.children.is_empty() // or any other condition you use to define a leaf
+    }
+
+    /// Generate a proof for the existence of a key in the Verkle tree.
+    pub fn generate_proof(&self, key: &[u8]) -> Option<VerkleProof> {
+        let mut current_node = self;
+        let mut path: Vec<VerkleNodeProof> = Vec::new();
+        let hashed_key = hash(key); // Hash the key if your tree uses hashed keys
+
+        // Loop until a leaf is found or there are no more nodes to check
+        while let Some(child) = current_node.children.iter().find(|&child| {
+            match child {
+                Entry::InternalNode(node) => node.key[0] == hashed_key[0], // Modify as needed based on your key structure
+                Entry::Leaf(leaf) => leaf.key == hashed_key,
+                _ => false,
+            }
+        }) {
+            // Construct node proof for the current node
+            let node_proof = VerkleNodeProof {
+                key: current_node.key.clone(),
+                commitment: current_node.commitment.clone(),
+                // Include other necessary data for the proof
+            };
+            path.push(node_proof);
+
+            // Check if the current node is the target leaf node
+            if let Entry::Leaf(leaf) = child {
+                if leaf.key == hashed_key {
+                    break; // Stop if the target leaf node is found
+                }
+            }
+
+            // Move to the next node (only if it's an internal node)
+            if let Entry::InternalNode(next_node) = child {
+                current_node = next_node;
+            } else {
+                break; // Stop if it's a leaf but not the target
+            }
+        }
+
+        // Return None if no leaf with the key is found
+        if path.last().map_or(true, |p| !matches!(p, VerkleNodeProof { key: _, commitment: _ })) {
+            return None;
+        }
+
+        Some(VerkleProof { path })
+    }
+
+        
     
 }
 
@@ -331,6 +465,35 @@ impl VerkleTree {
         // Start the commitment setting process from the root node
         self.root.set_commitments_recursive(committer_key, &mut rng)
     }
+
+    pub fn print_commitments(&self) {
+        println!("Tree Commitments:");
+        self.root.print_commitments(0);
+    }
+
+    /// Verifies the commitments of the entire tree.
+    pub fn check_commitments(&self) -> bool {
+        let ck = &self.params.1; // Committer key
+        self.root.check_commitment(ck)
+    }
+
+    // Verify the commitment path for a specific key
+    pub fn verify_path(&self, key: Vec<u8>) -> bool {
+        let path = self.root.get_path(&key);
+        for node in path {
+            let ck = &self.params.1; // Committer key
+            if !node.check_commitment(ck) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Generate a proof for a given key within the Verkle tree.
+    pub fn generate_proof_for_key(&self, key: &[u8]) -> Option<VerkleProof> {
+        self.root.generate_proof(key)
+    }
+    
 
 }
 
