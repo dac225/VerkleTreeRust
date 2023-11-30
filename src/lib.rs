@@ -12,6 +12,7 @@ use ark_ff::Zero;
 use ark_poly_commit::PCRandomness;
 use rand::thread_rng;
 
+
 // Set up for Polynomial Commitments using ark library
 type BlsFr = <Bls12_381 as PairingEngine>::Fr;
 type Poly = DensePolynomial<BlsFr>;
@@ -72,7 +73,7 @@ pub enum Entry {
 }
 
 #[derive(Debug)] 
-pub struct VerkleProof {
+pub struct PathProof {
     pub path: Vec<VerkleNodeProof>,
 }
 
@@ -387,12 +388,16 @@ impl Node {
 
         let labeled_commitment = LabeledCommitment::new("node_commitment".to_string(), commitment_ref.clone(), None);
 
+        // Generate a random challenge for the proof opening and checking
+        let challenge = BlsFr::rand(rng); 
+
+        // open the proof
         let proof = KZG10::open(
             ck,
             std::iter::once(&labeled_polynomial),
             std::iter::once(&labeled_commitment),
             &point,
-            BlsFr::zero(),
+            challenge,
             std::iter::once(&<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Randomness::empty()), // Assuming empty randomness; adjust if needed
             Some(rng)
         )?;
@@ -404,7 +409,7 @@ impl Node {
             &point,
             std::iter::once(labeled_polynomial.evaluate(&point)),
             &proof,
-            BlsFr::zero(),
+            challenge,
             Some(rng)
         )
     }
@@ -415,7 +420,11 @@ impl Node {
     }
 
     /// Generate a proof for the existence of a key in the Verkle tree.
-    pub fn generate_proof(&self, key: &[u8]) -> Option<VerkleProof> {
+    pub fn generate_path_proof(&self, key: &[u8]) -> Option<PathProof> {
+        let combined_commitment = VerkleNodeProof {
+            key: self.key.clone(),
+            commitment: self.commitment.clone(),
+        };
         let mut current_node = self;
         let mut path: Vec<VerkleNodeProof> = Vec::new();
         let hashed_key = hash(key); // Hash the key if your tree uses hashed keys
@@ -469,19 +478,19 @@ impl Node {
             return None;
         }
 
-        Some(VerkleProof { path })
+        Some(PathProof { path })
     }
 
     // Generate a proof of membership for a given key within the Verkle tree.
     pub fn proof_of_membership(
         &self,
         key: &[u8],
-    ) -> Option<VerkleProof> {
+    ) -> Option<PathProof> {
         // Retrieve the node at the level of the tree using the raw key
         let node = self.get(key.to_vec());
     
         // Generate the Verkle proof based on whether the key is found or not
-        let proof = self.generate_proof(key);
+        let proof = self.generate_path_proof(key);
     
         match node {
             Some(_) => println!("Key found, generating proof of membership."),
@@ -619,15 +628,15 @@ impl VerkleTree {
     }
 
     /// Generate a proof for a given key within the Verkle tree.
-    pub fn generate_proof_for_key(&self, key: &[u8]) -> Option<VerkleProof> {
-        self.root.generate_proof(key)
+    pub fn generate_proof_for_key(&self, key: &[u8]) -> Option<PathProof> {
+        self.root.generate_path_proof(key)
     }
 
     // Generate a proof of membership for a given key within the Verkle tree.
     pub fn proof_of_membership_for_key(
         &self,
         key: &[u8],
-    ) -> Option<VerkleProof> {
+    ) -> Option<PathProof> {
         self.root.proof_of_membership(key)
     }
 
@@ -635,7 +644,7 @@ impl VerkleTree {
     pub fn verify_proof(
         &self,
         key: &[u8],
-        proof: &VerkleProof,
+        proof: &PathProof,
         vk: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::VerifierKey,
         opening_challenge: BlsFr,
         rng: &mut dyn RngCore,

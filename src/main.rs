@@ -8,9 +8,33 @@ use rand::Rng;
 use sha2::{Sha256, Digest};
 use hex;
 use std::collections::HashSet;
-
+use std::error::Error;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::env;
+use std::path::PathBuf;
 
 use VerkleTreeRust::VerkleTree;
+
+pub fn read_data_from_file(file_path: PathBuf) -> Result<Vec<(Vec<u8>, Vec<u8>)>, Box<dyn Error>> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let mut data: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    
+    for line in reader.lines() {
+        let line = line?;
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 2 {
+            let address = parts[0].to_string().chars().map(|c| c as u8).collect();
+            let balance = parts[1].to_string().chars().map(|c| c as u8).collect();
+            data.push((address, balance));
+        } else {
+            eprintln!("Invalid line format: {}", line);
+        }
+    }
+
+    Ok(data)
+}
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -23,37 +47,37 @@ fn main() {
     let params = KZG10::setup(degree, None, &mut rng).unwrap();
     let (committer_key, verifier_key) = KZG10::trim(&params, degree, 0, None).unwrap();
 
-    let depth = 40;
+    let depth = 32;
     let branching_factor = 256;
 
     // Create a VerkleTree with committer_key and verifier_key
-    let mut tree = VerkleTree::new(130, 256)
+    let mut tree = VerkleTree::new(depth, branching_factor)
         .expect("Failed to create VerkleTree");
     println!("Created VerkleTree with depth 130, branching factor 256");
 
-    // Inserting values
-    let wallet_address = "fc91428771e2b031cd46b0478ce20a7af0b110d4";
-    let key_wallet = hex::decode(wallet_address).expect("Failed to decode hex string");
-    tree.insert(key_wallet.clone(), vec![13, 14, 15]);
-    println!("Inserted wallet address \"{}\" with value {:?}", wallet_address, vec![13, 14, 15]);
+    // use data_reader.rs to read data from files in the input_file folder
+    let current_dir = env::current_dir().unwrap();
+    let input_file_path = current_dir.join("input_files/test_data.txt");
+    let data = read_data_from_file(input_file_path).expect("Failed to read data from file");
 
-    let wallet_address2 = "9dcd";
-    let key_wallet2 = hex::decode(wallet_address2).expect("Failed to decode hex string");
-    tree.insert(key_wallet2.clone(), vec![14, 15, 16]);
-    println!("Inserted wallet address \"{}\" with value {:?}", wallet_address2, vec![14, 15, 16]);
-
-    // Check if the keys are in the tree
-    let retrieved_value = tree.get(key_wallet.clone());
-    match retrieved_value {
-        Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
-        None => println!("No value found for wallet address {}", wallet_address),
+    // insert data into the tree
+    for (key, value) in data {
+        tree.insert(hex::decode(key.clone()).expect("Failed to decode hex string"), value.clone());
+        println!("Inserted wallet address \"{:?}\" with value {:?}", key.clone(), value.clone());
     }
+
+    // // Check if the keys are in the tree
+    // let retrieved_value = tree.get(key_wallet.clone());
+    // match retrieved_value {
+    //     Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
+    //     None => println!("No value found for wallet address {}", wallet_address),
+    // }
     
-    let retrieved_value2 = tree.get(key_wallet2.clone());
-    match retrieved_value2 {
-        Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address2, value),
-        None => println!("No value found for wallet address {}", wallet_address2),
-    }
+    // let retrieved_value2 = tree.get(key_wallet2.clone());
+    // match retrieved_value2 {
+    //     Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address2, value),
+    //     None => println!("No value found for wallet address {}", wallet_address2),
+    // }
 
     // Setting and checking commitments
     if let Err(e) = tree.set_commitments() {
@@ -62,45 +86,45 @@ fn main() {
         println!("Commitments set successfully.");
     }
 
-    // Check all commitments in the tree
+    // ask the user if they would like to enter a key for verification for membership
+    let mut input = String::new();
+    println!("Enter a key to verify for membership in the tree: ");
+    std::io::stdin().read_line(&mut input).expect("Failed to read line");
+    let user_search_key = hex::decode(input.trim()).expect("Failed to decode hex string");
+
+    // In creating and proving a verkle tree proof, the proof would typically consist of  
+        // 1) The combined_commitment of the tree (root commitmet)
+        // 2) The path to the desired key (in verkle tree node indices)
+        // 3) The sibling_commitments along the path to the desired key (all other commitments in the tree)
+    // In our code, we provide the path to the desired key as the commitments that must be checked for membership because the 
+        // re-assembling of the path commitments using the path indices and sibling commitments would necessitate implementing a 
+        // new proof protocol which was time-infeasable.
+
+    // Check all commitments in the tree 
+    // This serves as the proof of correctness for the root and sibling commitments
+    // If the user's chosen search-key is a member, this will also technically prove that the key is a member,
+        // but we will also prove the membership of the key in the tree using the path_commitments to the key
     match tree.check_commitments() {
         Ok(valid) => println!("All commitments in the tree are valid: {}", valid),
         Err(e) => eprintln!("Error checking commitments: {:?}", e),
     }
 
-    // Test the verification for specific keys and generate proofs
-    let keys_to_verify = vec![key_wallet.clone(), key_wallet2.clone()];
-    for key in keys_to_verify {
-        // Verify the path for the key
-        match tree.verify_path(key.clone()) {
-            Ok(valid) => println!("Verification for key {:?}: {}", hex::encode(&key), valid),
-            Err(e) => eprintln!("Error verifying path for key {:?}: {:?}", hex::encode(&key), e),
-        }
-
-        // Generate and display the proof for the key
-        if let Some(proof) = tree.generate_proof_for_key(&key) {
-            println!("Proof for key {:?}: {:?}", hex::encode(&key), proof);
-        } else {
-            println!("No proof generated for key {:?}", hex::encode(&key));
-        }
+    // Verify the path for the key
+    match tree.verify_path(user_search_key.clone()) {
+        Ok(valid) => println!("Verification for key {:?}: {}", hex::encode(&user_search_key), valid),
+        Err(e) => eprintln!("Error verifying path for key {:?}: {:?}", hex::encode(&user_search_key), e),
     }
 
-    // Test checking commitments for specific keys, including a non-existent key
-    let non_existent_key = "9cd99c";
-    let key_to_check_commitment = hex::decode(non_existent_key).expect("Failed to decode hex string");
-
-    match tree.check_commitment_for_key(&key_wallet) {
-        Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key_wallet), valid),
-        Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key_wallet), e),
+    // Generate and display the proof for the key
+    if let Some(proof) = tree.generate_proof_for_key(&user_search_key) {
+        println!("Proof for key {:?}: {:?}", hex::encode(&user_search_key), proof);
+    } else {
+        println!("No proof generated for key {:?}", hex::encode(&user_search_key));
     }
 
-    match tree.check_commitment_for_key(&key_wallet2) {
-        Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key_wallet2), valid),
-        Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key_wallet2), e),
+    match tree.check_commitment_for_key(&user_search_key) {
+        Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&user_search_key), valid),
+        Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&user_search_key), e),
     }
 
-    match tree.check_commitment_for_key(&key_to_check_commitment) {
-        Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key_to_check_commitment), valid),
-        Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key_to_check_commitment), e),
-    }
 }
