@@ -7,6 +7,8 @@ use ark_bls12_381::Bls12_381;
 use rand::Rng;
 use sha2::{Sha256, Digest};
 use hex;
+use std::collections::HashSet;
+
 
 use VerkleTreeRust::VerkleTree;
 
@@ -83,28 +85,22 @@ fn main() {
         }
     }
 
-    // Test the proof of membership for the key "fc91428771e2b031cd46b0478ce20a7af0b110d4"
-    let key_to_search = "fc91428771e2b031cd46b0478ce20a7af0b110d4";
-    let decoded_key_to_search = hex::decode(key_to_search).expect("Failed to decode hex string");
-    let proof = tree.proof_of_membership_for_key(&decoded_key_to_search);
-
-    match proof {
-        Some(verkle_proof) => {
-            println!("Proof of membership for key {}: {:?}", key_to_search, verkle_proof);
-        },
-        None => {
-            println!("No proof of membership generated for key {}", key_to_search);
-        },
-    }
-
     // Test checking commitments for specific keys, including a non-existent key
     let non_existent_key = "9cd99c";
-    let keys_to_check_commitment = vec![key_wallet.clone(), key_wallet2.clone(), hex::decode(non_existent_key).expect("Failed to decode hex string")];
-    
-    for key in keys_to_check_commitment {
-        match tree.check_commitment_for_key(&key) {
-            Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key), valid),
-            Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key), e),
-        }
+    let key_to_check_commitment = hex::decode(non_existent_key).expect("Failed to decode hex string");
+
+    match tree.check_commitment_for_key(&key_wallet) {
+        Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key_wallet), valid),
+        Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key_wallet), e),
+    }
+
+    match tree.check_commitment_for_key(&key_wallet2) {
+        Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key_wallet2), valid),
+        Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key_wallet2), e),
+    }
+
+    match tree.check_commitment_for_key(&key_to_check_commitment) {
+        Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key_to_check_commitment), valid),
+        Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key_to_check_commitment), e),
     }
 }

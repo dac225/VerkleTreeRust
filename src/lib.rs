@@ -143,7 +143,7 @@ impl Node {
         }) {
             match &current_node.children[index] {
                 Entry::InternalNode(node) => {
-                    println!("Traversing to Internal Node at depth: {}, Key: {:?}", node.depth, node.key);
+                    // println!("Traversing to Internal Node at depth: {}, Key: {:?}", node.depth, node.key);
                     current_node = node;
                     depth += 1;
                 },
@@ -158,10 +158,65 @@ impl Node {
                 }
             }
         }
-    
         // Print a message and return None if traversal stopped without finding a matching leaf node
         println!("Traversal stopped at depth: {:?}, Key: {:?}", depth, hashed_key);
         None
+    }
+    
+    pub fn get_path(&self, key: &[u8]) -> Result<Vec<&Node>, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
+        let hashed_key = hash(key);
+        let mut current_node = self;
+        let mut path: Vec<&Node> = Vec::new();
+        let mut depth = 0;
+    
+        loop {
+            path.push(current_node);
+    
+            if current_node.children.is_empty() {
+                break; // Reached a leaf node or an empty node
+            }
+    
+            // Find the next node to traverse based on the hashed key
+            let index_option = current_node.children.iter().position(|child| {
+                match child {
+                    Entry::InternalNode(node) => {
+                        node.key.get(0) == hashed_key.get(depth)
+                    },
+                    Entry::Leaf(leaf) => {
+                        leaf.key == hashed_key
+                    }
+                }
+            });
+    
+            match index_option {
+                Some(index) => {
+                    match &current_node.children[index] {
+                        Entry::InternalNode(node) => {
+                            // println!("Traversing to Internal Node at depth: {}, Key: {:?}", node.depth, node.key);
+                            current_node = node;
+                            depth += 1;
+                        },
+                        Entry::Leaf(leaf) => {
+                            // println!("Found Leaf Node at depth: {}, Key: {:?}", depth, leaf.key);
+                            if leaf.key == hashed_key {
+                                // The current node contains the matching leaf, so it's already added to the path
+                                break; // Found the target leaf node
+                            } else {
+                                path.clear(); // Key mismatch in leaf node, clear the path
+                                break;
+                            }
+                        }
+                    }
+                },
+                None => {
+                    // Child not found, stop the traversal
+                    path.clear();
+                    break;
+                }
+            }
+        }
+    
+        Ok(path)
     }
     
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
@@ -344,46 +399,6 @@ impl Node {
             Some(rng)
         )
     }
-    
-    pub fn get_path(&self, key: &[u8]) -> Vec<&Node> {
-        let mut path = Vec::new();
-        let mut current_node = self;
-        let hashed_key = hash(key);
-    
-        loop {
-            path.push(current_node);
-    
-            // Check if this is the target leaf node
-            if let Entry::Leaf(leaf) = &current_node.children[0] {
-                if leaf.key == hashed_key {
-                    break;
-                }
-            }
-    
-            // Determine the next node to move to
-            let current_depth = path.len() - 1;
-            let next_node = current_node.children.iter().find_map(|child| {
-                match child {
-                    Entry::InternalNode(node) => {
-                        if node.key.get(current_depth) == hashed_key.get(current_depth) {
-                            Some(node)
-                        } else {
-                            None
-                        }
-                    },
-                    Entry::Leaf(leaf) if leaf.key == hashed_key => Some(current_node),
-                    _ => None,
-                }
-            });
-    
-            match next_node {
-                Some(node) => current_node = node,
-                None => break, // Key not found, return the path so far
-            }
-        }
-    
-        path
-    }    
 
     // Helper method to check if a node is a leaf
     fn is_leaf(&self) -> bool {
@@ -571,17 +586,26 @@ impl VerkleTree {
 
     // Verify the commitment path for a specific key
     pub fn verify_path(&self, key: Vec<u8>) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
-        let path = self.root.get_path(&key);
+        let path_result = self.root.get_path(&key);
         let ck = &self.params.1; // Committer key
         let vk = &self.params.2; // Verifier key
         let mut rng = thread_rng(); // Or your preferred RNG
 
-        for node in path {
-            if !node.check_commitment(ck, vk, &mut rng)? {
-                return Ok(false);
+        match path_result {
+            Ok(path) => {
+                for node in path {
+                    if !node.check_commitment(ck, vk, &mut rng)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            },
+            Err(error) => {
+                println!("Error: {}", error);
+                // Handle the case where the path is None (key not found)
+                Ok(false)
             }
         }
-        Ok(true)
     }
 
     /// Generate a proof for a given key within the Verkle tree.
@@ -663,6 +687,7 @@ impl VerkleTree {
         // Implement logic to extract or compute the KZG10 proof
         unimplemented!()
     }
+
     pub fn check_commitment_for_key(
         &self,
         key: &[u8]
@@ -670,20 +695,27 @@ impl VerkleTree {
         let ck = &self.params.1; // Committer key
         let vk = &self.params.2; // Verifier key
         let mut rng = thread_rng(); // RNG
-
+    
         // Find the path to the node with the given key
-        let path = self.root.get_path(key);
-
-        // Check if the last node in the path actually corresponds to the key
-        if let Some(node) = path.last() {
-            if node.key == key {
-                // Proceed with the commitment check
-                node.check_commitment(ck, vk, &mut rng)
-            } else {
-                // Key does not exist in the tree
-                Err(ark_poly_commit::Error::MissingPolynomial {
+        let path = match self.root.get_path(key) {
+            Ok(path) => path,
+            Err(error) => {
+                println!("Error getting path: {}", error);
+                return Err(ark_poly_commit::Error::MissingPolynomial {
                     label: format!("Key: {}", hex::encode(key))
-                })
+                });
+            }
+        };
+    
+        // Check if the last node in the path corresponds to the key
+        if let Some(node) = path.last() {
+            // Proceed with the commitment check
+            match node.check_commitment(ck, vk, &mut rng) {
+                Ok(valid) => Ok(valid),
+                Err(e) => {
+                    println!("Error checking commitment for key {:?}: {:?}", hex::encode(key), e);
+                    Err(e)
+                },
             }
         } else {
             // Path not found to the key
@@ -692,6 +724,8 @@ impl VerkleTree {
             })
         }
     }
+    
+    
 }
 
 #[cfg(test)]
