@@ -19,6 +19,6 @@ rand = "0.8"
 ark-serialize = "0.3.0"
 ark-bn254 = "0.3.0" 
 hex = "0.4"
-
+ark-sponge = "0.3.0"
 
 

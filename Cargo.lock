@@ -13,6 +13,7 @@ dependencies = [
  "ark-poly 0.3.0",
  "ark-poly-commit",
  "ark-serialize 0.3.0",
+ "ark-sponge",
  "ark-std 0.3.0",
  "digest 0.10.7",
  "hex",
@@ -327,6 +328,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "ark-sponge"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0c7a8ce8c0b0dad619872efd707395884fc05f46e9b0e7ac3903b51fa0e59ac"
+dependencies = [
+ "ark-ec 0.3.0",
+ "ark-ff 0.3.0",
+ "ark-nonnative-field",
+ "ark-r1cs-std",
+ "ark-relations",
+ "ark-serialize 0.3.0",
+ "ark-std 0.3.0",
+ "derivative",
+ "digest 0.9.0",
+ "rand_chacha",
+ "tracing",
 ]
 
 [[package]]

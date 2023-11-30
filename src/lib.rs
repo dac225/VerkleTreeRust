@@ -4,10 +4,14 @@ use ark_ff::{Field, PrimeField};
 use ark_poly::UVPolynomial;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
-use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel, LabeledCommitment};
+use ark_poly_commit::{Polynomial, PolynomialCommitment, PolynomialLabel, LabeledCommitment, LabeledPolynomial};
+use ark_sponge::CryptographicSponge;
+use ark_sponge::poseidon::PoseidonSponge;
 use sha2::{Sha256, Digest}; // Explicitly import the Digest trait
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
+use ark_ff::UniformRand;
+use ark_sponge::poseidon::{PoseidonParameters,PoseidonSponge};
 
 // Set up for Polynomial Commitments using ark library
 type BlsFr = <Bls12_381 as PairingEngine>::Fr;
@@ -58,7 +62,9 @@ pub struct LeafNode {
 pub struct Node {
     pub key: Vec<u8>,
     pub children: Vec<Entry>, // Entry now uses BlsFr implicitly
+    pub polynomials: Option<Vec<LabeledPolynomial<BlsFr, Poly>>>,
     pub commitment: Option<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Commitment>,
+    pub randomness: Option<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Randomness>,
     pub max_children: usize,
     pub depth: usize,
 }
@@ -87,6 +93,8 @@ impl Node {
             key,
             children: Vec::new(),
             commitment: None,
+            polynomials: None,
+            randomness: None,
             max_children,
             depth,
         }
@@ -270,6 +278,46 @@ impl Node {
         }
 
         Ok(())
+    }
+
+    // Open the commitment at a given node
+    fn open_commitment(
+        &self, 
+        ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey,
+        rng: &mut impl RngCore,
+    ) -> Result<
+        (
+            <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Proof,
+            <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Randomness,
+        ),
+        <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error>{
+        // assign labeled_commitment from the node's commitment we are opening
+        let _labeled_commitment = LabeledCommitment::new(
+            "node_key_commitment".to_string(),
+            self.commitment.clone().unwrap(),
+            None
+        );
+        // assign labeled_polynomial from the node's polynomial
+        let _labeled_polynomial = LabeledPolynomial::new(
+            "poly".to_string(),
+            self.polynomials.clone().unwrap().first().unwrap().polynomial().clone(),
+            None,
+            None
+        );
+        // assign our random point on the curve for evaluation 
+        let _point = BlsFr::rand(&mut rng);
+        // I'm just using this function to get the correct type to put in the parameters for the sponge 
+        // N.B. I'm not sure if this is the correct way to do this, but I know that the compiler seems to be happy with it
+        let _rand_ark = PoseidonParameters::random_ark(1, rng);
+        // assign our sponge parameters
+        let sponge_params = PoseidonParameters::<BlsFr>::new(1,1,1,_rand_ark, _rand_ark);
+        // initialize sponge
+        let _sponge = PoseidonSponge::<BlsFr>::new(&sponge_params);
+        _sponge.absorb(&BlsFr::rand(&mut rng));
+        let _rands = Randomness::
+
+
+
     }
 
     pub fn print_commitments(&self, depth: usize) {
