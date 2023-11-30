@@ -83,6 +83,7 @@ pub struct VerkleNodeProof {
 }
 
 impl Node {
+    // Create a new node with the given key, max_children, and depth
     pub fn new(key: Vec<u8>, max_children: usize, depth: usize) -> Self {
         Node {
             // key: hash(&key),
@@ -94,10 +95,12 @@ impl Node {
         }
     }
 
+    // Print the tree
     pub fn print_tree(&self) {
         self.print_node(0); // Start the traversal from depth 0
     }
 
+    // Helper method to print a node
     fn print_node(&self, depth: usize) {
         let indent = "  ".repeat(depth); // Add indentation for better visualization
 
@@ -121,6 +124,8 @@ impl Node {
             }
         }
     }
+
+    // Get the value for a given key
     pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         // Hash the key first
         let hashed_key = hash(&key);
@@ -163,6 +168,7 @@ impl Node {
         None
     }
     
+    // Get the path to a leaf node with the given key
     pub fn get_path(&self, key: &[u8]) -> Result<Vec<&Node>, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let hashed_key = hash(key);
         let mut current_node = self;
@@ -219,6 +225,7 @@ impl Node {
         Ok(path)
     }
     
+    // Insert a key-value pair into the tree
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
         let hashed_key = hash(&key);
         println!("Inserting key: {:?}, hashed: {:?}", key, hashed_key);
@@ -329,6 +336,7 @@ impl Node {
         Ok(())
     }
 
+    // Print the commitments of the tree
     pub fn print_commitments(&self, depth: usize) {
         let indent = "  ".repeat(depth);
         println!("{}Node at depth {}: {:?}", indent, depth, self.commitment);
@@ -345,7 +353,8 @@ impl Node {
         }
     }
 
-    fn check_commitment(
+    // Check the commitment of all the nodes in the tree
+    pub fn check_commitment(
         &self, 
         ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey,
         vk: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::VerifierKey,
@@ -402,7 +411,7 @@ impl Node {
 
     // Helper method to check if a node is a leaf
     fn is_leaf(&self) -> bool {
-        self.children.is_empty() // or any other condition you use to define a leaf
+        self.children.is_empty() 
     }
 
     /// Generate a proof for the existence of a key in the Verkle tree.
@@ -463,7 +472,7 @@ impl Node {
         Some(VerkleProof { path })
     }
 
-
+    // Generate a proof of membership for a given key within the Verkle tree.
     pub fn proof_of_membership(
         &self,
         key: &[u8],
@@ -482,6 +491,7 @@ impl Node {
         proof
     }
     
+    // Check the commitment of a node
     fn verify_node_commitment(
         &self, 
         ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey
@@ -688,6 +698,7 @@ impl VerkleTree {
         unimplemented!()
     }
 
+    // Check the commitment for a specific key
     pub fn check_commitment_for_key(
         &self,
         key: &[u8]
@@ -731,8 +742,6 @@ impl VerkleTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    
     fn setup_tree() -> VerkleTree {
         let mut rng = rand::thread_rng();
         let degree = 256;
