@@ -2,24 +2,27 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-pub fn read_data_from_file(file_path: &str) -> Result<Vec<(Vec<u8>, Vec<u8>)>, Box<dyn Error>> {
+pub fn read_data_from_file_at_line(file_path: &str, line_number: usize) -> Result<Option<(Vec<u8>, Vec<u8>)>, Box<dyn Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
-    let mut data: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
-    
+    let mut current_line = 0;
+
     for line in reader.lines() {
         let line = line?;
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() == 2 {
-            let address = parts[0].to_string().chars().map(|c| c as u8).collect();
-            let balance = parts[1]
-                .parse()
-                .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-            data.push((address, vec![balance]));
-        } else {
-            eprintln!("Invalid line format: {}", line);
+        if current_line == line_number {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            println!("Debug: parts = {:?}", parts); // Print parts for debugging
+            if parts.len() == 2 {
+                let address = parts[0].as_bytes().to_vec();
+                let balance = parts[1].parse::<u128>().map(|v| v.to_le_bytes().to_vec()).map_err(|e| Box::new(e) as Box<dyn Error>)?;
+                return Ok(Some((address, balance)));
+            } else {
+                eprintln!("Invalid line format: {}", line);
+                return Ok(None);
+            }
         }
+        current_line += 1;
     }
 
-    Ok(data)
+    Ok(None)
 }
