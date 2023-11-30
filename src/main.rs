@@ -24,20 +24,19 @@ fn main() {
     let depth = 40;
     let branching_factor = 256;
 
-    // Create a VerkleTree
-    let mut tree = VerkleTree::new(130, 256).expect("Failed to create VerkleTree");
+    // Create a VerkleTree with committer_key and verifier_key
+    let mut tree = VerkleTree::new(130, 256)
+        .expect("Failed to create VerkleTree");
     println!("Created VerkleTree with depth 130, branching factor 256");
 
     // Inserting values
     let wallet_address = "fc91428771e2b031cd46b0478ce20a7af0b110d4";
     let key_wallet = hex::decode(wallet_address).expect("Failed to decode hex string");
-    let key_wallet_clone = key_wallet.clone(); // Clone the key
     tree.insert(key_wallet.clone(), vec![13, 14, 15]);
     println!("Inserted wallet address \"{}\" with value {:?}", wallet_address, vec![13, 14, 15]);
 
     let wallet_address2 = "9dcd";
     let key_wallet2 = hex::decode(wallet_address2).expect("Failed to decode hex string");
-    let key_wallet2_clone = key_wallet2.clone(); // Clone the key
     tree.insert(key_wallet2.clone(), vec![14, 15, 16]);
     println!("Inserted wallet address \"{}\" with value {:?}", wallet_address2, vec![14, 15, 16]);
 
@@ -54,9 +53,6 @@ fn main() {
         None => println!("No value found for wallet address {}", wallet_address2),
     }
 
-    // Uncomment to print the tree structure
-    // tree.print_tree();
-
     // Setting and checking commitments
     if let Err(e) = tree.set_commitments() {
         eprintln!("Error setting commitments: {:?}", e);
@@ -64,17 +60,20 @@ fn main() {
         println!("Commitments set successfully.");
     }
 
-    // tree.print_commitments();
-
-    let commitments_are_valid = tree.check_commitments();
-    println!("All commitments in the tree are valid: {}", commitments_are_valid);
+    // Check all commitments in the tree
+    match tree.check_commitments() {
+        Ok(valid) => println!("All commitments in the tree are valid: {}", valid),
+        Err(e) => eprintln!("Error checking commitments: {:?}", e),
+    }
 
     // Test the verification for specific keys and generate proofs
-    let keys_to_verify = vec![key_wallet, key_wallet2];
+    let keys_to_verify = vec![key_wallet.clone(), key_wallet2.clone()];
     for key in keys_to_verify {
         // Verify the path for the key
-        let result = tree.verify_path(key.clone());
-        println!("Verification for key {:?}: {}", hex::encode(&key), result);
+        match tree.verify_path(key.clone()) {
+            Ok(valid) => println!("Verification for key {:?}: {}", hex::encode(&key), valid),
+            Err(e) => eprintln!("Error verifying path for key {:?}: {:?}", hex::encode(&key), e),
+        }
 
         // Generate and display the proof for the key
         if let Some(proof) = tree.generate_proof_for_key(&key) {
@@ -98,7 +97,14 @@ fn main() {
         },
     }
 
-    let mut new_tree = VerkleTree::new(depth, branching_factor).expect("Failed to create new VerkleTree");
-
-
+    // Test checking commitments for specific keys, including a non-existent key
+    let non_existent_key = "9cd99c";
+    let keys_to_check_commitment = vec![key_wallet.clone(), key_wallet2.clone(), hex::decode(non_existent_key).expect("Failed to decode hex string")];
+    
+    for key in keys_to_check_commitment {
+        match tree.check_commitment_for_key(&key) {
+            Ok(valid) => println!("Commitment valid for key {:?}: {}", hex::encode(&key), valid),
+            Err(e) => eprintln!("Error checking commitment for key {:?}: {:?}", hex::encode(&key), e),
+        }
+    }
 }

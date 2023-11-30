@@ -7,6 +7,10 @@ use ark_poly_commit::{PolynomialCommitment, LabeledCommitment};
 use sha2::{Sha256, Digest}; 
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
+use ark_ff::UniformRand;
+use ark_ff::Zero;
+use ark_poly_commit::PCRandomness;
+use rand::thread_rng;
 
 // Set up for Polynomial Commitments using ark library
 type BlsFr = <Bls12_381 as PairingEngine>::Fr;
@@ -286,12 +290,13 @@ impl Node {
         }
     }
 
-    /// Checks the commitment of the node.
     fn check_commitment(
         &self, 
-        ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey
-    ) -> bool {
-        // Step 1: Recompute the polynomial from the node's data
+        ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey,
+        vk: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::VerifierKey,
+        rng: &mut impl RngCore
+    ) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
+        // Recreate the polynomial from the node's data
         let mut coefficients = Vec::new();
         for child in &self.children {
             let child_key = match child {
@@ -303,48 +308,82 @@ impl Node {
             coefficients.push(field_element);
         }
         let polynomial = DensePolynomial::from_coefficients_vec(coefficients);
-
-        // Step 2: Recompute the commitment
         let labeled_polynomial = ark_poly_commit::LabeledPolynomial::new("poly".to_string(), polynomial, None, None);
-        let recomputed_commitment = match KZG10::commit(ck, std::iter::once(&labeled_polynomial), None) {
-            Ok(commitment) => commitment.0.first().cloned().unwrap().commitment().clone(),
-            Err(_) => return false,
-        };
 
-        // Step 3: Compare the recomputed commitment with the stored one
-        match &self.commitment {
-            Some(stored_commitment) => *stored_commitment == recomputed_commitment,
-            None => false,
-        }
+        // Select a random point for evaluation
+        let point = BlsFr::rand(rng);
+
+        // Step 1: Create an opening proof at the chosen point
+        // Prepare labeled polynomial and commitment
+        let commitment_ref = self.commitment.as_ref().ok_or_else(|| {
+            ark_poly_commit::Error::MissingPolynomial {
+                label: "node_commitment".to_string()
+            }
+        })?;
+
+        let labeled_commitment = LabeledCommitment::new("node_commitment".to_string(), commitment_ref.clone(), None);
+
+        let proof = KZG10::open(
+            ck,
+            std::iter::once(&labeled_polynomial),
+            std::iter::once(&labeled_commitment),
+            &point,
+            BlsFr::zero(),
+            std::iter::once(&<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Randomness::empty()), // Assuming empty randomness; adjust if needed
+            Some(rng)
+        )?;
+
+        // Step 2: Verify the opening proof
+        KZG10::check(
+            vk,
+            std::iter::once(&labeled_commitment),
+            &point,
+            std::iter::once(labeled_polynomial.evaluate(&point)),
+            &proof,
+            BlsFr::zero(),
+            Some(rng)
+        )
     }
-
+    
     pub fn get_path(&self, key: &[u8]) -> Vec<&Node> {
         let mut path = Vec::new();
         let mut current_node = self;
-
+        let hashed_key = hash(key);
+    
         loop {
             path.push(current_node);
-            if current_node.is_leaf() && current_node.key == key {
-                break;
+    
+            // Check if this is the target leaf node
+            if let Entry::Leaf(leaf) = &current_node.children[0] {
+                if leaf.key == hashed_key {
+                    break;
+                }
             }
-
+    
             // Determine the next node to move to
+            let current_depth = path.len() - 1;
             let next_node = current_node.children.iter().find_map(|child| {
                 match child {
-                    Entry::InternalNode(node) => Some(node),
-                    Entry::Leaf(leaf) if leaf.key == key => Some(current_node),
+                    Entry::InternalNode(node) => {
+                        if node.key.get(current_depth) == hashed_key.get(current_depth) {
+                            Some(node)
+                        } else {
+                            None
+                        }
+                    },
+                    Entry::Leaf(leaf) if leaf.key == hashed_key => Some(current_node),
                     _ => None,
                 }
             });
-
+    
             match next_node {
                 Some(node) => current_node = node,
                 None => break, // Key not found, return the path so far
             }
         }
-
+    
         path
-    }
+    }    
 
     // Helper method to check if a node is a leaf
     fn is_leaf(&self) -> bool {
@@ -522,21 +561,27 @@ impl VerkleTree {
     }
 
     /// Verifies the commitments of the entire tree.
-    pub fn check_commitments(&self) -> bool {
+    pub fn check_commitments(&self) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let ck = &self.params.1; // Committer key
-        self.root.check_commitment(ck)
+        let vk = &self.params.2; // Verifier key
+        let mut rng = thread_rng(); // Or your preferred RNG
+
+        self.root.check_commitment(ck, vk, &mut rng)
     }
 
     // Verify the commitment path for a specific key
-    pub fn verify_path(&self, key: Vec<u8>) -> bool {
+    pub fn verify_path(&self, key: Vec<u8>) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let path = self.root.get_path(&key);
+        let ck = &self.params.1; // Committer key
+        let vk = &self.params.2; // Verifier key
+        let mut rng = thread_rng(); // Or your preferred RNG
+
         for node in path {
-            let ck = &self.params.1; // Committer key
-            if !node.check_commitment(ck) {
-                return false;
+            if !node.check_commitment(ck, vk, &mut rng)? {
+                return Ok(false);
             }
         }
-        true
+        Ok(true)
     }
 
     /// Generate a proof for a given key within the Verkle tree.
@@ -617,6 +662,35 @@ impl VerkleTree {
     fn extract_kzg_proof(&self, node_proof: &VerkleNodeProof) -> Result<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Proof, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         // Implement logic to extract or compute the KZG10 proof
         unimplemented!()
+    }
+    pub fn check_commitment_for_key(
+        &self,
+        key: &[u8]
+    ) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
+        let ck = &self.params.1; // Committer key
+        let vk = &self.params.2; // Verifier key
+        let mut rng = thread_rng(); // RNG
+
+        // Find the path to the node with the given key
+        let path = self.root.get_path(key);
+
+        // Check if the last node in the path actually corresponds to the key
+        if let Some(node) = path.last() {
+            if node.key == key {
+                // Proceed with the commitment check
+                node.check_commitment(ck, vk, &mut rng)
+            } else {
+                // Key does not exist in the tree
+                Err(ark_poly_commit::Error::MissingPolynomial {
+                    label: format!("Key: {}", hex::encode(key))
+                })
+            }
+        } else {
+            // Path not found to the key
+            Err(ark_poly_commit::Error::MissingPolynomial {
+                label: format!("Key: {}", hex::encode(key))
+            })
+        }
     }
 }
 
