@@ -1,1 +1,1 @@
-/Users/victorcarolino/Desktop/CurrentClasses/cse242-fa23/VerkleTreeRust/target/debug/VerkleTreeRust: /Users/victorcarolino/Desktop/CurrentClasses/cse242-fa23/VerkleTreeRust/src/lib.rs /Users/victorcarolino/Desktop/CurrentClasses/cse242-fa23/VerkleTreeRust/src/main.rs
+/Users/victorcarolino/Desktop/CurrentClasses/cse242-fa23/Hw3/code/VerkleTreeRust/target/debug/VerkleTreeRust: /Users/victorcarolino/Desktop/CurrentClasses/cse242-fa23/Hw3/code/VerkleTreeRust/src/lib.rs /Users/victorcarolino/Desktop/CurrentClasses/cse242-fa23/Hw3/code/VerkleTreeRust/src/main.rs
