@@ -1,5 +1,5 @@
 use ark_ec::PairingEngine;
-use ark_ff::{PrimeField};
+use ark_ff::PrimeField;
 use ark_poly::UVPolynomial;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_poly_commit::marlin::marlin_pc::MarlinKZG10;
@@ -8,10 +8,8 @@ use sha2::{Sha256, Digest};
 use rand::RngCore;
 use ark_bls12_381::Bls12_381;
 use ark_ff::UniformRand;
-use ark_ff::Zero;
 use ark_poly_commit::PCRandomness;
 use rand::thread_rng;
-
 
 // Set up for Polynomial Commitments using ark library
 type BlsFr = <Bls12_381 as PairingEngine>::Fr;
@@ -19,6 +17,7 @@ type Poly = DensePolynomial<BlsFr>;
 
 type KZG10 = MarlinKZG10<Bls12_381, Poly>;
 
+/// Wrapper for the setup function that returns the necessary parameters for the VerkleTree polynomial commitment scheme
 pub fn setup<R: RngCore>(
     max_degree: usize,
     _num_vars: Option<usize>,
@@ -36,13 +35,14 @@ pub fn setup<R: RngCore>(
     Ok((params, committer_key, verifier_key))
 }
 
-// hash function (SHA-256 most likely)
+/// sha256 hash function wrapper
 pub fn hash(data: &[u8]) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(data);
     hasher.finalize().to_vec()
 }
 
+/// Hashes the given data and converts it into a field element
 pub fn hash_to_field<F>(hashed_data: &[u8]) -> F 
 where
     F: PrimeField, // Add this trait bound
@@ -50,15 +50,14 @@ where
     F::from_le_bytes_mod_order(hashed_data)
 }
 
-
-// LeafNode Structure
+/// LeafNode Structure
 #[derive(Clone)]
 pub struct LeafNode {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
 }
 
-// Node structure
+/// Node structure
 pub struct Node {
     pub key: Vec<u8>,
     pub children: Vec<Entry>, // Entry now uses BlsFr implicitly
@@ -67,24 +66,28 @@ pub struct Node {
     pub depth: usize,
 }
 
+/// Node Entry structure
 pub enum Entry {
     InternalNode(Node),
     Leaf(LeafNode),
 }
 
+/// PathProof structure
 #[derive(Debug)] 
 pub struct PathProof {
     pub path: Vec<VerkleNodeProof>,
 }
 
+/// VerkleNodeProof structure
 #[derive(Debug)] 
 pub struct VerkleNodeProof {
     pub key: Vec<u8>,
     pub commitment: Option<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Commitment>,
 }
 
+/// Node functions
 impl Node {
-    // Create a new node with the given key, max_children, and depth
+    /// Create a new node with the given key, max_children, and depth
     pub fn new(key: Vec<u8>, max_children: usize, depth: usize) -> Self {
         Node {
             // key: hash(&key),
@@ -96,12 +99,12 @@ impl Node {
         }
     }
 
-    // Print the tree
+    /// Print the tree starting at depth 0
     pub fn print_tree(&self) {
         self.print_node(0); // Start the traversal from depth 0
     }
 
-    // Helper method to print a node
+    /// Helper method to print a node
     fn print_node(&self, depth: usize) {
         let indent = "  ".repeat(depth); // Add indentation for better visualization
 
@@ -126,7 +129,7 @@ impl Node {
         }
     }
 
-    // Get the value for a given key
+    /// Get the value for a given key
     pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         // Hash the key first
         let hashed_key = hash(&key);
@@ -169,7 +172,7 @@ impl Node {
         None
     }
     
-    // Get the path to a leaf node with the given key
+    /// Get the path to a leaf node with the given key
     pub fn get_path(&self, key: &[u8]) -> Result<Vec<&Node>, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let hashed_key = hash(key);
         let mut current_node = self;
@@ -226,7 +229,7 @@ impl Node {
         Ok(path)
     }
     
-    // Insert a key-value pair into the tree
+    /// Insert a key-value pair into the tree
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, max_depth: usize) {
         let hashed_key = hash(&key);
         println!("Inserting key: {:?}, hashed: {:?}", key, hashed_key);
@@ -337,7 +340,7 @@ impl Node {
         Ok(())
     }
 
-    // Print the commitments of the tree
+    /// Print the commitments of the tree
     pub fn print_commitments(&self, depth: usize) {
         let indent = "  ".repeat(depth);
         println!("{}Node at depth {}: {:?}", indent, depth, self.commitment);
@@ -354,7 +357,7 @@ impl Node {
         }
     }
 
-    // Check the commitment of all the nodes in the tree
+    /// Check the commitment of all the nodes in the tree
     pub fn check_commitment(
         &self, 
         ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey,
@@ -414,17 +417,8 @@ impl Node {
         )
     }
 
-    // Helper method to check if a node is a leaf
-    fn is_leaf(&self) -> bool {
-        self.children.is_empty() 
-    }
-
     /// Generate a proof for the existence of a key in the Verkle tree.
     pub fn generate_path_proof(&self, key: &[u8]) -> Option<PathProof> {
-        let combined_commitment = VerkleNodeProof {
-            key: self.key.clone(),
-            commitment: self.commitment.clone(),
-        };
         let mut current_node = self;
         let mut path: Vec<VerkleNodeProof> = Vec::new();
         let hashed_key = hash(key); // Hash the key if your tree uses hashed keys
@@ -481,7 +475,7 @@ impl Node {
         Some(PathProof { path })
     }
 
-    // Generate a proof of membership for a given key within the Verkle tree.
+    /// Generate a proof of membership for a given key within the Verkle tree.
     pub fn proof_of_membership(
         &self,
         key: &[u8],
@@ -499,52 +493,10 @@ impl Node {
     
         proof
     }
-    
-    // Check the commitment of a node
-    fn verify_node_commitment(
-        &self, 
-        ck: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::CommitterKey
-    ) -> bool {
-        if self.children.is_empty() {
-            // No need to verify commitment for a leaf node or empty node
-            return true;
-        }
-
-        let mut coefficients = Vec::new();
-        for child in &self.children {
-            let child_key = match child {
-                Entry::InternalNode(node) => &node.key,
-                Entry::Leaf(leaf) => &leaf.key,
-            };
-            let child_hash = hash(child_key);
-            let field_element = hash_to_field::<BlsFr>(&child_hash);
-            coefficients.push(field_element);
-        }
-
-        let polynomial = DensePolynomial::from_coefficients_vec(coefficients);
-
-        let labeled_polynomial = ark_poly_commit::LabeledPolynomial::new(
-            "poly".to_string(), 
-            polynomial, 
-            None, 
-            None
-        );
-
-        let recomputed_commitment = match KZG10::commit(ck, std::iter::once(&labeled_polynomial), None) {
-            Ok(commitment) => commitment.0.first().cloned().unwrap().commitment().clone(),
-            Err(_) => return false,
-        };
-
-        match &self.commitment {
-            Some(stored_commitment) => *stored_commitment == recomputed_commitment,
-            None => false,
-        }
-    }
-    
-    
 }
 
 
+/// VerkleTree structure
 pub struct VerkleTree {
     pub root: Node,
     pub params: (
@@ -555,7 +507,10 @@ pub struct VerkleTree {
     pub max_depth: usize,
 }
 
+/// VerkleTree functions
 impl VerkleTree {
+
+    /// Create a new VerkleTree with the given depth and branching factor
     pub fn new(
         depth: usize,
         branching_factor: usize,
@@ -568,19 +523,23 @@ impl VerkleTree {
         })
     }
     
+    /// Print the tree
     pub fn print_tree(&self) {
         self.root.print_tree();
     }
     
+    /// Get the value for a given key
     pub fn get(&self, key: Vec<u8>) -> Option<Vec<u8>> {
         self.root.get(key)
     }
 
+    /// Insert a key-value pair into the tree
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
         self.root.insert(key, value, self.max_depth);
 
     }
-    // Public method to set commitments on the tree
+
+    /// Set the commitments for the entire tree
     pub fn set_commitments(&mut self) -> Result<(), <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let committer_key = &self.params.1;
         let mut rng = rand::thread_rng();
@@ -589,6 +548,7 @@ impl VerkleTree {
         self.root.set_commitments_recursive(committer_key, &mut rng)
     }
 
+    /// Print the commitments of the tree
     pub fn print_commitments(&self) {
         println!("Tree Commitments:");
         self.root.print_commitments(0);
@@ -603,7 +563,7 @@ impl VerkleTree {
         self.root.check_commitment(ck, vk, &mut rng)
     }
 
-    // Verify the commitment path for a specific key
+    /// Verifies the commitment of a specific key.
     pub fn verify_path(&self, key: Vec<u8>) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
         let path_result = self.root.get_path(&key);
         let ck = &self.params.1; // Committer key
@@ -632,7 +592,7 @@ impl VerkleTree {
         self.root.generate_path_proof(key)
     }
 
-    // Generate a proof of membership for a given key within the Verkle tree.
+    /// Generate a proof of membership for a given key within the Verkle tree.
     pub fn proof_of_membership_for_key(
         &self,
         key: &[u8],
@@ -640,74 +600,7 @@ impl VerkleTree {
         self.root.proof_of_membership(key)
     }
 
-    /// Verify a proof for a given key in the Verkle tree.
-    pub fn verify_proof(
-        &self,
-        key: &[u8],
-        proof: &PathProof,
-        vk: &<KZG10 as PolynomialCommitment<BlsFr, Poly>>::VerifierKey,
-        opening_challenge: BlsFr,
-        rng: &mut dyn RngCore,
-    ) -> Result<bool, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
-        if proof.path.is_empty() {
-            return Ok(false);
-        }
-
-        // Recompute the hashed key
-        let hashed_key = hash(key);
-        let point = hash_to_field::<BlsFr>(&hashed_key);
-
-        for node_proof in proof.path.iter() {
-            if let Some(commitment) = &node_proof.commitment {
-                // Derive the expected values at the point
-                let values = self.derive_values_at_point(node_proof, &point)?;
-
-                // Extract or compute the KZG10 proof
-                let kzg_proof = self.extract_kzg_proof(node_proof)?;
-
-                // Create LabeledCommitment
-                let labeled_commitment = LabeledCommitment::new(
-                    "node_key_commitment".to_string(),
-                    commitment.clone(),
-                    None
-                );
-
-                // Prepare labeled commitments and values for the check
-                let labeled_commitments = vec![&labeled_commitment];
-                let values_iter = vec![values];
-
-                // Check the commitment using the KZG10 check function
-                if !KZG10::check(
-                    vk, 
-                    labeled_commitments.into_iter(), 
-                    &point, 
-                    values_iter.into_iter(), 
-                    &kzg_proof, 
-                    opening_challenge, 
-                    Some(rng)
-                )? {
-                    return Ok(false);
-                }
-            } else {
-                return Ok(false);
-            }
-        }
-
-        Ok(true)
-    }
-
-    // Helper methods to derive values and extract proofs
-    fn derive_values_at_point(&self, node_proof: &VerkleNodeProof, point: &BlsFr) -> Result<BlsFr, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
-        // Implement logic to derive values at the given point
-        unimplemented!()
-    }
-
-    fn extract_kzg_proof(&self, node_proof: &VerkleNodeProof) -> Result<<KZG10 as PolynomialCommitment<BlsFr, Poly>>::Proof, <KZG10 as PolynomialCommitment<BlsFr, Poly>>::Error> {
-        // Implement logic to extract or compute the KZG10 proof
-        unimplemented!()
-    }
-
-    // Check the commitment for a specific key
+    /// Check the commitment for a specific key
     pub fn check_commitment_for_key(
         &self,
         key: &[u8]

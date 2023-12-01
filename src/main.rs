@@ -16,6 +16,7 @@ use std::path::PathBuf;
 
 use VerkleTreeRust::VerkleTree;
 
+/// Helper function to read data from file
 pub fn read_data_from_file(file_path: PathBuf) -> Result<Vec<(Vec<u8>, Vec<u8>)>, Box<dyn Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
@@ -66,19 +67,6 @@ fn main() {
         println!("Inserted wallet address \"{:?}\" with value {:?}", key.clone(), value.clone());
     }
 
-    // // Check if the keys are in the tree
-    // let retrieved_value = tree.get(key_wallet.clone());
-    // match retrieved_value {
-    //     Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address, value),
-    //     None => println!("No value found for wallet address {}", wallet_address),
-    // }
-    
-    // let retrieved_value2 = tree.get(key_wallet2.clone());
-    // match retrieved_value2 {
-    //     Some(value) => println!("Retrieved value for wallet address {}: {:?}", wallet_address2, value),
-    //     None => println!("No value found for wallet address {}", wallet_address2),
-    // }
-
     // Setting and checking commitments
     if let Err(e) = tree.set_commitments() {
         eprintln!("Error setting commitments: {:?}", e);
@@ -115,7 +103,7 @@ fn main() {
         Err(e) => eprintln!("Error verifying path for key {:?}: {:?}", hex::encode(&user_search_key), e),
     }
 
-    // Generate and display the proof for the key
+    // Generate and display the verkle proof of membership for the user's search key
     if let Some(proof) = tree.generate_proof_for_key(&user_search_key) {
         println!("Proof for key {:?}: {:?}", hex::encode(&user_search_key), proof);
     } else {
